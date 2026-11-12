@@ -4,8 +4,8 @@ A ten-week textbook for CMSC 270 (Lawrence University).
 
 **Read it online: <https://alackles.github.io/where-things-live/>** 
 
-- **Web edition**: `dist/html/index.html`.
-- **Print edition**: `dist/where-things-live.pdf`, typeset with LaTeX (7 × 10 in).
+- **Web edition**: `dist/html/index.html`
+- **Print edition**: `dist/where-things-live.pdf`
 
 ## A Human Note
 
