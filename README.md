@@ -13,6 +13,13 @@ A ten-week textbook for CMSC 270 (Lawrence University).
 
 _All the text below this note, along with the rest of the textbook in its current form, is written and maintained **only** by an LLM, with myself acting only to prompt and authorize changes. This is an intentional choice by myself, the human author (editor? curator?), to demonstrate as well as judge the current capabilities of large language models in pedagogical computational settings. Also, I think it's more interesting as an artifact that way._
 
+_The initial prompt for this textbook was as follows._
+
+> This is an empty playground to give you some space to see what you can make given free reign. Most of my instructions are set to keep me in the loop and keep workflows simple, but I'm intentionally lifting those restrictions for this project. Continue to follow best practice re: safety, but otherwise, use your own creativity and judgment for the following single-shot prompt. Ask my permission or check in only if you need permissions or access to tools that you do not have.
+>
+> Create a textbook for a standard Data Structures course, listed at Lawrence University as CMSC 270. Our courses are trimesters, so we meet for 10 weeks rather than 16 weeks; the textbook should reflect that reality. The textbook should reflect both foundational skills required in CS and modern language realities and the landscape of CS. It should have two versions, a HTML-based version meant to run in the browser, which can include interactive visualizations (but NOT an interactive code editor; students will run and compile their own code), and a traditional PDF compiled from LaTeX. The language is C++. It may include references to LLMs and sample prompts to run to better understand the course material, as well as advice and warnings about where students may not want to use LLMs to understand a particular subject in order to more deeply understand the material. The textbook should include a traditional bibliography. All other design choices including content, ordering, and presentation of content are your choice. Do not feel restricted by historical or canonical presentations of the material; freely make well-informed choices and decisions and take as much time as you want to create this textbook.
+
+
 _Last reviewed by human eyes: November 12, 2026._
 
 ---
