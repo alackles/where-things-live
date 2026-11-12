@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Toolchain · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-appendix">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Appendix A: The Toolchain</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class="current"><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+<ol class="secs">
+<li><a href="#sec:tc-install"><span class="n">A.1</span> Getting a compiler</a></li>
+<li><a href="#sec:tc-compile"><span class="n">A.2</span> Building programs</a></li>
+<li><a href="#sec:tc-errors"><span class="n">A.3</span> Reading compiler errors</a></li>
+<li><a href="#sec:tc-sanitizers"><span class="n">A.4</span> Reading sanitizer reports</a></li>
+<li><a href="#sec:tc-debug"><span class="n">A.5</span> When the program is simply wrong</a></li>
+</ol>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="app:toolchain">
+<p class="kicker">
+Appendix A
+</p>
+<h1>
+The Toolchain
+</h1>
+</header>
+<p>This appendix is a reference for the mechanics of working in C++: getting a compiler, building programs, and reading what the tools tell you. Skim it in the first week and come back when something breaks.</p>
+<section id="sec:tc-install" class="level2">
+<h2><span class="secnum">A.1</span> Getting a compiler</h2>
+<p>You need a compiler that supports C++20. Either of the two major open-source compilers will do: GCC (whose C++ compiler is the command <code>g++</code>), version 11 or later, or Clang (<code>clang++</code>), version 14 or later. The book’s code was tested with GCC 13.</p>
+<p><strong>Linux.</strong> Install your distribution’s compiler package. On Debian or Ubuntu: <code>sudo apt install g++ make</code>.</p>
+<p><strong>macOS.</strong> Run <code>xcode-select --install</code> in a terminal. This installs Apple’s version of Clang, which also answers to the name <code>g++</code>. It handles everything in this book, with one caveat about leak detection noted below.</p>
+<p><strong>Windows.</strong> The smoothest route is the Windows Subsystem for Linux (WSL), which gives you a real Linux environment; then follow the Linux instructions.</p>
+<p><strong>Lab machines.</strong> Your instructor will tell you what is installed and how to reach it.</p>
+<p>Check your installation:</p>
+<pre class="console"><code>$ g++ --version
+g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0</code></pre>
+</section>
+<section id="sec:tc-compile" class="level2">
+<h2><span class="secnum">A.2</span> Building programs</h2>
+<p>The one command you need:</p>
+<pre class="console"><code>$ g++ -std=c++20 -Wall -Wextra -g -fsanitize=address,undefined prog.cpp -o prog
+$ ./prog</code></pre>
+<table>
+<colgroup>
+<col style="width: 37%" />
+<col style="width: 31%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Flag</th>
+<th style="text-align: left;">What it does</th>
+<th style="text-align: left;">Why</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>-std=c++20</code></td>
+<td style="text-align: left;">selects the language version</td>
+<td style="text-align: left;">older defaults reject some of the book’s code</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>-Wall -Wextra</code></td>
+<td style="text-align: left;">enables most warnings</td>
+<td style="text-align: left;">warnings are free bug reports; fix them all</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>-g</code></td>
+<td style="text-align: left;">records line numbers in the program</td>
+<td style="text-align: left;">so that sanitizers and debuggers can name source lines</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>-fsanitize=address,undefined</code></td>
+<td style="text-align: left;">adds run-time error checking</td>
+<td style="text-align: left;">catches memory errors and undefined behavior as they happen</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>-o prog</code></td>
+<td style="text-align: left;">names the output</td>
+<td style="text-align: left;">otherwise it is called <code>a.out</code></td>
+</tr>
+</tbody>
+</table>
+<p>For <em>timing</em> a program, use a different set of flags: optimization on, sanitizers off.</p>
+<pre class="console"><code>$ g++ -std=c++20 -O2 prog.cpp -o prog</code></pre>
+<p>Never time a program built with sanitizers, and never trust the correctness of a program you have only run without them.</p>
+<p><strong>Programs in several files.</strong> List all the <code>.cpp</code> files on the command line. Header files (<code>.hpp</code>) are not listed; they are pulled in by <code>#include</code>. To tell the compiler where to look for headers, use <code>-I</code>:</p>
+<pre class="console"><code>$ g++ -std=c++20 -Wall -Wextra -g -fsanitize=address,undefined -I. main.cpp util.cpp -o main</code></pre>
+<p><strong>The book’s code.</strong> The <code>code/</code> directory has a <code>Makefile</code> that builds everything.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Command</th>
+<th style="text-align: left;">Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>make test</code></td>
+<td style="text-align: left;">compiles every program with warnings as errors and both sanitizers, then runs each one</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>make bench</code></td>
+<td style="text-align: left;">compiles the timing programs with <code>-O2</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>make bugs</code></td>
+<td style="text-align: left;">compiles the deliberately broken programs, so that you can watch them fail</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>make clean</code></td>
+<td style="text-align: left;">removes everything that was built</td>
+</tr>
+</tbody>
+</table>
+<p>Typing long commands repeatedly is tedious and error-prone. For your own assignments, a three-line <code>Makefile</code> is enough to start with (the last line, the command, must begin with a tab character, not spaces):</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode makefile"><code class="sourceCode makefile"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">CXXFLAGS</span> <span class="ch">=</span><span class="st"> -std=c++20 -Wall -Wextra -g -fsanitize=address,undefined</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="dv">prog:</span><span class="dt"> prog.cpp</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="er">    </span>g++ <span class="ch">$(</span><span class="dt">CXXFLAGS</span><span class="ch">)</span> prog.cpp -o prog</span></code></pre></div>
+</section>
+<section id="sec:tc-errors" class="level2">
+<h2><span class="secnum">A.3</span> Reading compiler errors</h2>
+<p>C++ compilers are thorough and not concise. Three habits make their output manageable.</p>
+<p><strong>Fix the first error first.</strong> One mistake often produces a cascade of consequent errors. Scroll to the top, fix the first, and recompile. Many of the rest will vanish.</p>
+<p><strong>Find the line that is yours.</strong> An error involving a template can run to dozens of lines, most of them naming files deep inside the standard library. Look for the line that mentions <em>your</em> file. That is where the mistake is.</p>
+<p><strong>Read the “note:” lines.</strong> They often say what the compiler expected.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Message contains</th>
+<th style="text-align: left;">Usually means</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>expected ';' before ...</code></td>
+<td style="text-align: left;">a missing semicolon, on the line <em>before</em> the one named</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>'x' was not declared in this scope</code></td>
+<td style="text-align: left;">a misspelling, a missing <code>#include</code>, or a missing <code>std::</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>no matching function for call to ...</code></td>
+<td style="text-align: left;">wrong number or types of arguments; the notes list the candidates</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>invalid conversion from 'const char*' to 'int'</code></td>
+<td style="text-align: left;">a value of the wrong type</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>passing 'const X' as 'this' argument discards qualifiers</code></td>
+<td style="text-align: left;">calling a non-<code>const</code> member function on a <code>const</code> object; the function probably should be marked <code>const</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>use of deleted function</code></td>
+<td style="text-align: left;">an attempt to copy something that cannot be copied, such as a <code>std::unique_ptr</code>; use <code>std::move</code>, or pass by reference</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>undefined reference to ...</code></td>
+<td style="text-align: left;">this is from the <em>linker</em>: a function was declared but its definition was never compiled in; a <code>.cpp</code> file is missing from the command line</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>comparison of integer expressions of different signedness</code></td>
+<td style="text-align: left;">(warning) comparing an <code>int</code> with a <code>std::size_t</code>; make the loop variable a <code>std::size_t</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>unused variable</code> / <code>unused parameter</code></td>
+<td style="text-align: left;">(warning) often a sign of a typo or unfinished logic</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>control reaches end of non-void function</code></td>
+<td style="text-align: left;">(warning) some path through the function forgets to <code>return</code> a value; that path is undefined behavior</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="sec:tc-sanitizers" class="level2">
+<h2><span class="secnum">A.4</span> Reading sanitizer reports</h2>
+<p>A report from AddressSanitizer has the same parts every time. Here is one from <a href="01-memory.html">Chapter 1</a>, abbreviated.</p>
+<pre class="console"><code>==46472==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x50200000001c
+READ of size 4 at 0x50200000001c thread T0
+    #0 0x62a34ecde731 in main ch01/bugs/oob.cpp:8
+    #1 ...
+0x50200000001c is located 0 bytes after 12-byte region
+                                     [0x502000000010,0x50200000001c)
+allocated by thread T0 here:
+    #0 ... in operator new(unsigned long)
+    ...
+    #7 0x62a34ecde5b3 in main ch01/bugs/oob.cpp:5</code></pre>
+<ol type="1">
+<li><strong>The first line names the kind of error.</strong> See the table below.</li>
+<li><strong>The second says what the program was doing</strong>: reading or writing, and how many bytes.</li>
+<li><strong>The first stack trace says where.</strong> Each line is a function call, innermost first. Read down until you reach a line in <em>your</em> code: here, <code>oob.cpp</code>, line 8.</li>
+<li><strong>The next line describes the memory involved</strong>: here, just past the end of a 12-byte block.</li>
+<li><strong>Further stack traces say where that memory was allocated</strong>, and for a use-after-free, where it was freed.</li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Report</th>
+<th style="text-align: left;">Meaning</th>
+<th style="text-align: left;">Typical cause</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>heap-buffer-overflow</code></td>
+<td style="text-align: left;">access outside a heap block</td>
+<td style="text-align: left;">index out of range; off-by-one in a loop</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>stack-buffer-overflow</code></td>
+<td style="text-align: left;">access outside a local array</td>
+<td style="text-align: left;">the same, on a local array</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>heap-use-after-free</code></td>
+<td style="text-align: left;">access to memory already deleted</td>
+<td style="text-align: left;">dangling pointer, reference, or iterator; an invalidated vector iterator</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>attempting double-free</code></td>
+<td style="text-align: left;">the same block deleted twice</td>
+<td style="text-align: left;">a missing copy constructor (shallow copy); deleting through two pointers</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>stack-use-after-scope</code>, <code>stack-use-after-return</code></td>
+<td style="text-align: left;">access to a local variable after it is gone</td>
+<td style="text-align: left;">keeping a pointer to a variable from an inner block; returning a pointer to a local (as Clang reports it)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>SEGV on unknown address 0x000000000000</code></td>
+<td style="text-align: left;">dereferenced a null pointer</td>
+<td style="text-align: left;">forgetting to check for <code>nullptr</code>; following <code>next</code> off the end of a list; with GCC, using a returned reference to a local (GCC turns the address into null)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>detected memory leaks</code></td>
+<td style="text-align: left;">(at exit) blocks never deleted</td>
+<td style="text-align: left;">a missing <code>delete</code>, or a destructor that does not free everything</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>alloc-dealloc-mismatch</code></td>
+<td style="text-align: left;"><code>new[]</code> paired with <code>delete</code>, or the reverse</td>
+<td style="text-align: left;">use <code>delete[]</code> for arrays</td>
+</tr>
+</tbody>
+</table>
+<p>UndefinedBehaviorSanitizer prints one line per problem, beginning with the file and line and the words <code>runtime error</code>: <code>signed integer overflow</code>, <code>index out of bounds</code>, <code>load of null pointer</code>, <code>division by zero</code>.</p>
+<aside class="callout note"><p class="callout-title"><span class="lab">Aside</span></p>
+<p>Leak detection is on by default on Linux. With Apple’s compiler on macOS it is not available; the other AddressSanitizer checks work normally. If you develop on a Mac, run your tests on a Linux machine as well before you hand them in.</p>
+</aside>
+</section>
+<section id="sec:tc-debug" class="level2">
+<h2><span class="secnum">A.5</span> When the program is simply wrong</h2>
+<p>The sanitizers catch errors of <em>memory</em>. Errors of <em>logic</em>, where the program runs cleanly and gives the wrong answer, need other methods.</p>
+<p><strong>Make it small.</strong> Find the smallest input on which the program misbehaves. For data structures the bug almost always appears with three or four elements. A differential test with small random inputs (<a href="03-vector.html#sec:vec-testing">Section 3.6</a>) will often find that input for you; print the sequence of operations that led to the failure.</p>
+<p><strong>Assert what you believe.</strong> Put <code>assert</code> statements wherever you can state something that must be true: a precondition at the top of a function, the class invariant at the end of every member function that modifies the object. The first assertion to fail is close to the bug.</p>
+<p><strong>Print.</strong> A few well-placed output statements, showing the state of the structure after each operation, are often the fastest route to understanding. Write a <code>print</code> or <code>dump</code> function for each structure you build. Send debugging output to <code>std::cerr</code>, which is not buffered, so that it appears even if the program crashes on the next line.</p>
+<p><strong>Use a debugger.</strong> A debugger (<code>gdb</code> on Linux, <code>lldb</code> on macOS) runs your program under your control: you can stop at any line, examine any variable, and step forward one statement at a time. Half a dozen commands cover most needs.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;"><code>gdb</code> command</th>
+<th style="text-align: left;">Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>break file.cpp:42</code></td>
+<td style="text-align: left;">stop when execution reaches that line</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>run</code></td>
+<td style="text-align: left;">start the program</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>next</code> / <code>step</code></td>
+<td style="text-align: left;">execute one line, stepping over / into function calls</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>print expr</code></td>
+<td style="text-align: left;">show the value of an expression</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>backtrace</code></td>
+<td style="text-align: left;">show the chain of function calls that led here</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>continue</code></td>
+<td style="text-align: left;">resume until the next breakpoint</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Explain it.</strong> Describe, line by line and out loud, what the code is supposed to do: to a classmate, to a rubber duck, or in writing. The act of explaining forces you to look at what the code says and not at what you meant. A language model can play the listener, and is good at it, particularly for compiler errors and sanitizer reports. Ask it what the message means, and do the fixing yourself.</p>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="10-wild.html"><span>← Previous</span>Data Structures in the Wild</a>
+<a class="next" href="a2-math.html"><span>Next →</span>A Little Mathematics</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+
+</body>
+</html>

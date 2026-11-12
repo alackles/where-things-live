@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graphs · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-chapter">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Chapter 9: Graphs</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class="current"><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+<ol class="secs">
+<li><a href="#sec:graph-rep"><span class="n">9.1</span> Graphs and how to store them</a></li>
+<li><a href="#sec:bfs"><span class="n">9.2</span> Breadth-first search</a></li>
+<li><a href="#sec:dfs"><span class="n">9.3</span> Depth-first search</a></li>
+<li><a href="#sec:dijkstra"><span class="n">9.4</span> Shortest paths with weights</a></li>
+<li><a href="#sec:union-find"><span class="n">9.5</span> Union-find</a></li>
+<li><a href="#sec:graphs-ex">Exercises</a></li>
+<li><a href="#sec:graphs-notes">Chapter notes</a></li>
+</ol>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:graphs">
+<p class="kicker">
+Chapter 9 · Week 9
+</p>
+<h1>
+Graphs
+</h1>
+</header>
+<aside class="callout goals"><p class="callout-title"><span class="lab">This week</span></p>
+<p>By the end of this week you should be able to:</p>
+<ul>
+<li>model a problem as a graph, saying what the vertices and edges are;</li>
+<li>represent a graph with adjacency lists or an adjacency matrix, and choose between them;</li>
+<li>implement breadth-first and depth-first search, and say what each is good for;</li>
+<li>find a topological order of a directed acyclic graph;</li>
+<li>implement Dijkstra’s algorithm with a priority queue, and explain why it requires non-negative weights;</li>
+<li>implement union-find with union by size and path compression.</li>
+</ul>
+</aside>
+<p>In a linked list, every node points to at most one other. In a tree, a node may point to several, but no node is pointed to by more than one, and there is a root from which everything hangs. Take away those restrictions, and let any node be connected to any others, and you have a <strong>graph</strong>: the most general linked structure, and the one that describes the world best.</p>
+<p>A road map is a graph: towns, and the roads between them. So is a social network (people, and who knows whom), the web (pages and links), an airline’s route map, the wiring of a circuit, the prerequisite structure of a curriculum, the dependency structure of a large program, the atoms and bonds of a molecule. Whenever the interesting thing about some objects is not the objects but the <em>relationships</em> between pairs of them, the right picture is a graph.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 9.1</span></p>
+<p>Six people are at a party. Some pairs are friends. You want to know the smallest number of introductions needed to get from Ana to Farid, where each introduction is made by a mutual friend. You start by listing Ana’s friends, then <em>their</em> friends, and so on. As you work outward, you need to keep track of people you have discovered but whose friends you have not yet listed. In what order should you process them: most recently discovered first, or earliest discovered first? Which data structure is that?</p>
+<details class="answer"><summary>Answer</summary>
+<p>Earliest discovered first. You want to finish with everyone one introduction away before moving on to anyone two away, or you might reach Farid by a roundabout route and report too large a number. First discovered, first processed is a queue. The procedure is called breadth-first search, and it is the first algorithm of this chapter.</p>
+</details>
+</aside>
+<p>This chapter is different in character from the ones before it. A graph is less a single data structure than a <em>setting</em>, in which the structures you already have (vectors, queues, stacks, priority queues, hash tables) are put to work together. Most of what follows is algorithms. Pay attention to which earlier structure sits at the heart of each one. It is rarely an accident.</p>
+<section id="sec:graph-rep" class="level2">
+<h2><span class="secnum">9.1</span> Graphs and how to store them</h2>
+<p>A graph consists of a set of <strong>vertices</strong> (also called nodes) and a set of <strong>edges</strong>, each of which connects two vertices.</p>
+<ul>
+<li>In an <strong>undirected</strong> graph, an edge is a two-way connection: if <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> is joined to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math>, then <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math> is joined to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math>. Friendship is like this.</li>
+<li>In a <strong>directed</strong> graph, each edge has a direction, from one vertex to another. “Page <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> links to page <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math>” and “course <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> is a prerequisite of course <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math>” are like this.</li>
+<li>In a <strong>weighted</strong> graph, each edge carries a number: a distance, a cost, a time.</li>
+</ul>
+<p>Two vertices joined by an edge are <strong>adjacent</strong>, or <strong>neighbors</strong>. A <strong>path</strong> is a sequence of vertices in which each is adjacent to the next. A <strong>cycle</strong> is a path that returns to where it began. An undirected graph is <strong>connected</strong> if there is a path between every pair of vertices; if not, it falls into several <strong>connected components</strong>.</p>
+<p>It is conventional to write <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math> for the number of vertices and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>E</mi><annotation encoding="application/x-tex">E</annotation></semantics></math> for the number of edges, and to state costs in terms of both. A graph with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math> vertices can have at most about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>V</mi><mn>2</mn></msup><annotation encoding="application/x-tex">V^2</annotation></semantics></math> edges (every pair). Most graphs that arise in practice have far fewer: a road junction joins three or four roads however large the country, and a person has a few hundred friends however large the network. Such graphs, where <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>E</mi><annotation encoding="application/x-tex">E</annotation></semantics></math> is much nearer to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math> than to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>V</mi><mn>2</mn></msup><annotation encoding="application/x-tex">V^2</annotation></semantics></math>, are called <strong>sparse</strong>.</p>
+<p>How should a graph be stored? There are two standard answers, and <a href="#fig:graph-rep">Figure 9.1</a> shows both for one small graph.</p>
+<figure class="fig" id="fig:graph-rep"><svg class="figsvg" viewBox="0 0 640 200" width="640" height="200" role="img" aria-label="A six-vertex graph with its adjacency lists and adjacency matrix." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="46.0" y1="91.7" x2="82.0" y2="62.3" stroke-width="1.2"/>
+<line class="s-ink f-none" x1="46.0" y1="108.3" x2="82.0" y2="137.7" stroke-width="1.2"/>
+<line class="s-ink f-none" x1="102.2" y1="62.1" x2="139.8" y2="91.9" stroke-width="1.2"/>
+<line class="s-ink f-none" x1="102.2" y1="137.9" x2="139.8" y2="108.1" stroke-width="1.2"/>
+<line class="s-ink f-none" x1="163.0" y1="100.0" x2="191.0" y2="100.0" stroke-width="1.2"/>
+<line class="s-ink f-none" x1="217.0" y1="100.0" x2="245.0" y2="100.0" stroke-width="1.2"/>
+<circle class="s-ink f-paper" cx="36" cy="100" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="36.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="12">0</text>
+<circle class="s-ink f-paper" cx="92" cy="54" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="92.0" y="54.0" text-anchor="middle" dominant-baseline="central" font-size="12">1</text>
+<circle class="s-ink f-paper" cx="92" cy="146" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="92.0" y="146.0" text-anchor="middle" dominant-baseline="central" font-size="12">2</text>
+<circle class="s-ink f-paper" cx="150" cy="100" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="150.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<circle class="s-ink f-paper" cx="204" cy="100" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="204.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="12">4</text>
+<circle class="s-ink f-paper" cx="258" cy="100" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="258.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="12">5</text>
+<text class="t-ink b" x="340.0" y="20.0" text-anchor="middle" dominant-baseline="central" font-size="12">adjacency lists</text>
+<rect class="s-ink f-muted-soft" x="300" y="36" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="311.0" y="46.0" text-anchor="middle" dominant-baseline="central" font-size="12">0</text>
+<line class="s-ink f-none" x1="322.0" y1="46.0" x2="332.0" y2="46.0" stroke-width="1"/>
+<polygon class="s-none f-ink" points="338.0,46.0 329.0,42.4 329.0,49.6"/>
+<rect class="s-ink f-none" x="340" y="36" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="351.0" y="46.0" text-anchor="middle" dominant-baseline="central" font-size="12">1</text>
+<rect class="s-ink f-none" x="362" y="36" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="373.0" y="46.0" text-anchor="middle" dominant-baseline="central" font-size="12">2</text>
+<rect class="s-ink f-muted-soft" x="300" y="60" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="311.0" y="70.0" text-anchor="middle" dominant-baseline="central" font-size="12">1</text>
+<line class="s-ink f-none" x1="322.0" y1="70.0" x2="332.0" y2="70.0" stroke-width="1"/>
+<polygon class="s-none f-ink" points="338.0,70.0 329.0,66.4 329.0,73.6"/>
+<rect class="s-ink f-none" x="340" y="60" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="351.0" y="70.0" text-anchor="middle" dominant-baseline="central" font-size="12">0</text>
+<rect class="s-ink f-none" x="362" y="60" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="373.0" y="70.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<rect class="s-ink f-muted-soft" x="300" y="84" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="311.0" y="94.0" text-anchor="middle" dominant-baseline="central" font-size="12">2</text>
+<line class="s-ink f-none" x1="322.0" y1="94.0" x2="332.0" y2="94.0" stroke-width="1"/>
+<polygon class="s-none f-ink" points="338.0,94.0 329.0,90.4 329.0,97.6"/>
+<rect class="s-ink f-none" x="340" y="84" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="351.0" y="94.0" text-anchor="middle" dominant-baseline="central" font-size="12">0</text>
+<rect class="s-ink f-none" x="362" y="84" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="373.0" y="94.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<rect class="s-ink f-muted-soft" x="300" y="108" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="311.0" y="118.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<line class="s-ink f-none" x1="322.0" y1="118.0" x2="332.0" y2="118.0" stroke-width="1"/>
+<polygon class="s-none f-ink" points="338.0,118.0 329.0,114.4 329.0,121.6"/>
+<rect class="s-ink f-none" x="340" y="108" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="351.0" y="118.0" text-anchor="middle" dominant-baseline="central" font-size="12">1</text>
+<rect class="s-ink f-none" x="362" y="108" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="373.0" y="118.0" text-anchor="middle" dominant-baseline="central" font-size="12">2</text>
+<rect class="s-ink f-none" x="384" y="108" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="395.0" y="118.0" text-anchor="middle" dominant-baseline="central" font-size="12">4</text>
+<rect class="s-ink f-muted-soft" x="300" y="132" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="311.0" y="142.0" text-anchor="middle" dominant-baseline="central" font-size="12">4</text>
+<line class="s-ink f-none" x1="322.0" y1="142.0" x2="332.0" y2="142.0" stroke-width="1"/>
+<polygon class="s-none f-ink" points="338.0,142.0 329.0,138.4 329.0,145.6"/>
+<rect class="s-ink f-none" x="340" y="132" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="351.0" y="142.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<rect class="s-ink f-none" x="362" y="132" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="373.0" y="142.0" text-anchor="middle" dominant-baseline="central" font-size="12">5</text>
+<rect class="s-ink f-muted-soft" x="300" y="156" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="311.0" y="166.0" text-anchor="middle" dominant-baseline="central" font-size="12">5</text>
+<line class="s-ink f-none" x1="322.0" y1="166.0" x2="332.0" y2="166.0" stroke-width="1"/>
+<polygon class="s-none f-ink" points="338.0,166.0 329.0,162.4 329.0,169.6"/>
+<rect class="s-ink f-none" x="340" y="156" width="22" height="20" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="351.0" y="166.0" text-anchor="middle" dominant-baseline="central" font-size="12">4</text>
+<text class="t-ink b" x="540.0" y="20.0" text-anchor="middle" dominant-baseline="central" font-size="12">adjacency matrix</text>
+<text class="t-muted mono" x="489.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<text class="t-muted mono" x="468.0" y="57.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<text class="t-muted mono" x="511.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="10">1</text>
+<text class="t-muted mono" x="468.0" y="79.0" text-anchor="middle" dominant-baseline="central" font-size="10">1</text>
+<text class="t-muted mono" x="533.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="10">2</text>
+<text class="t-muted mono" x="468.0" y="101.0" text-anchor="middle" dominant-baseline="central" font-size="10">2</text>
+<text class="t-muted mono" x="555.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="10">3</text>
+<text class="t-muted mono" x="468.0" y="123.0" text-anchor="middle" dominant-baseline="central" font-size="10">3</text>
+<text class="t-muted mono" x="577.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="10">4</text>
+<text class="t-muted mono" x="468.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="10">4</text>
+<text class="t-muted mono" x="599.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="10">5</text>
+<text class="t-muted mono" x="468.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="10">5</text>
+<rect class="s-muted f-none" x="478" y="46" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="489.0" y="57.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="500" y="46" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="511.0" y="57.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-accent-soft" x="522" y="46" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="533.0" y="57.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="544" y="46" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="555.0" y="57.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="566" y="46" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="577.0" y="57.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="588" y="46" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="599.0" y="57.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="478" y="68" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="489.0" y="79.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="500" y="68" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="511.0" y="79.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="522" y="68" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="533.0" y="79.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="544" y="68" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="555.0" y="79.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="566" y="68" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="577.0" y="79.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="588" y="68" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="599.0" y="79.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="478" y="90" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="489.0" y="101.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="500" y="90" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="511.0" y="101.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="522" y="90" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="533.0" y="101.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="544" y="90" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="555.0" y="101.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="566" y="90" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="577.0" y="101.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="588" y="90" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="599.0" y="101.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="478" y="112" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="489.0" y="123.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="500" y="112" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="511.0" y="123.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-accent-soft" x="522" y="112" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="533.0" y="123.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="544" y="112" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="555.0" y="123.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="566" y="112" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="577.0" y="123.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="588" y="112" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="599.0" y="123.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="478" y="134" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="489.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="500" y="134" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="511.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="522" y="134" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="533.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="544" y="134" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="555.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="566" y="134" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="577.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="588" y="134" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="599.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="478" y="156" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="489.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="500" y="156" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="511.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="522" y="156" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="533.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-none" x="544" y="156" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="555.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-muted f-accent-soft" x="566" y="156" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="577.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-muted f-none" x="588" y="156" width="22" height="22" rx="0" stroke-width="0.8"/>
+<text class="t-muted mono" x="599.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+</svg><figcaption>
+<span class="fignum">Figure 9.1</span> An undirected graph with six vertices and six edges, and its two standard representations. The adjacency lists give, for each vertex, the vertices it is joined to. The adjacency matrix has a 1 in row <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math>, column <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math> exactly when there is an edge between <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math>.
+</figcaption></figure>
+<p>An <strong>adjacency matrix</strong> is a <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mo>×</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">V \times V</annotation></semantics></math> table in which the entry in row <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> and column <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math> says whether there is an edge from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math> (or gives its weight). Testing for a particular edge is a single array access. But the matrix occupies <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>V</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V^2)</annotation></semantics></math> space no matter how few edges there are, and finding all the neighbors of a vertex means scanning a whole row. For a sparse graph with a million vertices, the matrix would have a trillion entries, almost all of them zero.</p>
+<p>An <strong>adjacency list</strong> representation stores, for each vertex, a list of its neighbors. The space is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math>: proportional to the actual size of the graph. Finding the neighbors of a vertex, which turns out to be the operation that graph algorithms perform constantly, takes time proportional to how many there are.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;"></th>
+<th style="text-align: left;">Adjacency matrix</th>
+<th style="text-align: left;">Adjacency lists</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Space</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>V</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V^2)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Is there an edge from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math>?</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mrow><mtext mathvariant="normal">number of neighbors of </mtext><mspace width="0.333em"></mspace></mrow><mi>u</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\text{number of neighbors of } u)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Visit all neighbors of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mrow><mtext mathvariant="normal">number of neighbors of </mtext><mspace width="0.333em"></mspace></mrow><mi>u</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\text{number of neighbors of } u)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Visit every edge</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>V</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V^2)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math></td>
+</tr>
+</tbody>
+</table>
+<p>For sparse graphs, which is to say nearly always, adjacency lists are the right choice, and they are what we will use. The representation is a vector of vectors.</p>
+<div class="listing"><div class="listing-file">code/ch09/graph.hpp</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Edge <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> to<span class="op">;</span>          <span class="co">// the vertex this edge leads to</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> weight<span class="op">;</span>   <span class="co">// its cost (1 if the graph is unweighted)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Graph <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> Graph<span class="op">(</span><span class="dt">int</span> vertices<span class="op">)</span> <span class="op">:</span> <span class="va">adj_</span><span class="op">(</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>vertices<span class="op">))</span> <span class="op">{}</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> size<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span><span class="va">adj_</span><span class="op">.</span>size<span class="op">());</span> <span class="op">}</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// A directed edge from u to v.</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> add_edge<span class="op">(</span><span class="dt">int</span> u<span class="op">,</span> <span class="dt">int</span> v<span class="op">,</span> <span class="dt">double</span> weight <span class="op">=</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="va">adj_</span><span class="op">[</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>u<span class="op">)].</span>push_back<span class="op">(</span>Edge<span class="op">{</span>v<span class="op">,</span> weight<span class="op">});</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// An undirected edge is a pair of directed ones.</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> add_undirected<span class="op">(</span><span class="dt">int</span> u<span class="op">,</span> <span class="dt">int</span> v<span class="op">,</span> <span class="dt">double</span> weight <span class="op">=</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        add_edge<span class="op">(</span>u<span class="op">,</span> v<span class="op">,</span> weight<span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        add_edge<span class="op">(</span>v<span class="op">,</span> u<span class="op">,</span> weight<span class="op">);</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// The edges leaving u.</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span>Edge<span class="op">&gt;&amp;</span> neighbors<span class="op">(</span><span class="dt">int</span> u<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">adj_</span><span class="op">[</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>u<span class="op">)];</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>vector<span class="op">&lt;</span>Edge<span class="op">&gt;&gt;</span> <span class="va">adj_</span><span class="op">;</span>   <span class="co">// adj_[u] lists u&#39;s outgoing edges</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<p>Vertices are identified by the integers 0 through <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">V - 1</annotation></semantics></math>, so that a vertex can index directly into a vector. This is simple and fast, and it is how nearly all graph code is written. When the vertices of your problem are really names, or coordinates, or web addresses, use a hash map to translate each one to an integer once, at the door.</p>
+<div class="listing"><div class="listing-file">code/ch09/graph_test.cpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Six vertices; the undirected edges of the chapter&#39;s running example.</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>Graph g<span class="op">(</span><span class="dv">6</span><span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>g<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>g<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>g<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>g<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>g<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>g<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">);</span></span></code></pre></div>
+</div>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>At very large scale even a vector of vectors is too scattered, with one heap allocation per vertex. Graph-processing systems and scientific libraries pack the whole thing into two flat arrays, a format called <em>compressed sparse row</em>: one long array holding every vertex’s neighbor list end to end, and a second array giving the position where each vertex’s list starts. It is the adjacency-list idea with the contiguity lesson of <a href="04-links.html#sec:cache">Section 4.5</a> applied.</p>
+</aside>
+</section>
+<section id="sec:bfs" class="level2">
+<h2><span class="secnum">9.2</span> Breadth-first search</h2>
+<p>The most basic question about a graph is: starting here, what can I reach, and how far away is it? <strong>Breadth-first search</strong>, or BFS, answers it by exploring outward from a source vertex in waves: first the source, then all its neighbors, then all of <em>their</em> neighbors that have not been seen, and so on. <a href="#fig:bfs-layers">Figure 9.2</a> shows the waves on our example graph.</p>
+<figure class="fig" id="fig:bfs-layers"><svg class="figsvg" viewBox="0 0 640 210" width="640" height="210" role="img" aria-label="The example graph with each vertex labelled by its BFS distance from vertex 0." xmlns="http://www.w3.org/2000/svg">
+<line class="s-accent f-none" x1="85.2" y1="97.4" x2="164.8" y2="57.6" stroke-width="2.6"/>
+<line class="s-accent f-none" x1="85.2" y1="112.6" x2="164.8" y2="152.4" stroke-width="2.6"/>
+<line class="s-accent f-none" x1="195.5" y1="57.1" x2="284.5" y2="97.9" stroke-width="2.6"/>
+<line class="s-ink f-none" x1="195.5" y1="152.9" x2="284.5" y2="112.1" stroke-width="1.2"/>
+<line class="s-accent f-none" x1="317.0" y1="105.0" x2="403.0" y2="105.0" stroke-width="2.6"/>
+<line class="s-accent f-none" x1="437.0" y1="105.0" x2="523.0" y2="105.0" stroke-width="2.6"/>
+<circle class="s-ink f-accent2-soft" cx="70" cy="105" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="70.0" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="13">0</text>
+<circle class="s-ink f-accent-soft" cx="180" cy="50" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="180.0" y="50.0" text-anchor="middle" dominant-baseline="central" font-size="13">1</text>
+<circle class="s-ink f-accent-soft" cx="180" cy="160" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="180.0" y="160.0" text-anchor="middle" dominant-baseline="central" font-size="13">2</text>
+<circle class="s-ink f-good-soft" cx="300" cy="105" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="300.0" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="13">3</text>
+<circle class="s-ink f-violet-soft" cx="420" cy="105" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="420.0" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="13">4</text>
+<circle class="s-ink f-muted-soft" cx="540" cy="105" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="540.0" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="13">5</text>
+<text class="t-muted" x="70.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="11">dist 0</text>
+<text class="t-muted" x="180.0" y="80.0" text-anchor="middle" dominant-baseline="central" font-size="11">dist 1</text>
+<text class="t-muted" x="180.0" y="190.0" text-anchor="middle" dominant-baseline="central" font-size="11">dist 1</text>
+<text class="t-muted" x="300.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="11">dist 2</text>
+<text class="t-muted" x="420.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="11">dist 3</text>
+<text class="t-muted" x="540.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="11">dist 4</text>
+<text class="t-accent2 b" x="70.0" y="60.0" text-anchor="middle" dominant-baseline="central" font-size="11">source</text>
+<text class="t-muted i" x="70.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="11">wave 0</text>
+<text class="t-muted i" x="180.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="11">wave 1</text>
+<text class="t-muted i" x="300.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="11">wave 2</text>
+<text class="t-muted i" x="420.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="11">wave 3</text>
+<text class="t-muted i" x="540.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="11">wave 4</text>
+</svg><figcaption>
+<span class="fignum">Figure 9.2</span> Breadth-first search from vertex 0. The number beside each vertex is its distance from the source, in edges. The search discovers vertices in order of distance: everything at distance 1, then everything at distance 2, and so on. The heavy edges are the ones along which each vertex was first discovered; they form a tree of shortest paths.
+</figcaption></figure>
+<p>Two pieces of bookkeeping are needed. First, a record of which vertices have already been discovered, so that the search does not go around a cycle forever. Second, the collection of vertices that have been discovered but not yet processed, called the <strong>frontier</strong>. As the opening question established, the frontier must be a queue.</p>
+<div class="listing"><div class="listing-file">code/ch09/algorithms.hpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> BfsResult <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> dist<span class="op">;</span>     <span class="co">// edges on a shortest path from the source; -1 if unreachable</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> parent<span class="op">;</span>   <span class="co">// previous vertex on that path; -1 for the source</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> BfsResult bfs<span class="op">(</span><span class="at">const</span> Graph<span class="op">&amp;</span> g<span class="op">,</span> <span class="dt">int</span> source<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    BfsResult r<span class="op">{</span><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>idx<span class="op">(</span>g<span class="op">.</span>size<span class="op">()),</span> <span class="op">-</span><span class="dv">1</span><span class="op">),</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>idx<span class="op">(</span>g<span class="op">.</span>size<span class="op">()),</span> <span class="op">-</span><span class="dv">1</span><span class="op">)};</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> frontier<span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    r<span class="op">.</span>dist<span class="op">[</span>idx<span class="op">(</span>source<span class="op">)]</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    frontier<span class="op">.</span>push<span class="op">(</span>source<span class="op">);</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(!</span>frontier<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> u <span class="op">=</span> frontier<span class="op">.</span>front<span class="op">();</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        frontier<span class="op">.</span>pop<span class="op">();</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> Edge<span class="op">&amp;</span> e <span class="op">:</span> g<span class="op">.</span>neighbors<span class="op">(</span>u<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>r<span class="op">.</span>dist<span class="op">[</span>idx<span class="op">(</span>e<span class="op">.</span>to<span class="op">)]</span> <span class="op">==</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span> <span class="op">{</span>            <span class="co">// first time we have seen e.to</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>                r<span class="op">.</span>dist<span class="op">[</span>idx<span class="op">(</span>e<span class="op">.</span>to<span class="op">)]</span> <span class="op">=</span> r<span class="op">.</span>dist<span class="op">[</span>idx<span class="op">(</span>u<span class="op">)]</span> <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>                r<span class="op">.</span>parent<span class="op">[</span>idx<span class="op">(</span>e<span class="op">.</span>to<span class="op">)]</span> <span class="op">=</span> u<span class="op">;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>                frontier<span class="op">.</span>push<span class="op">(</span>e<span class="op">.</span>to<span class="op">);</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> r<span class="op">;</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The <code>dist</code> vector does double duty. A value of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">-1</annotation></semantics></math> means “not yet discovered”; any other value is the vertex’s distance from the source. The algorithm takes a vertex <code>u</code> from the front of the queue and examines each of its neighbors. Any neighbor seen for the first time is one edge further from the source than <code>u</code> is; it is given its distance and added to the back of the queue.</p>
+<p><strong>Why the distances are right.</strong> The queue always holds vertices in order of distance: first some at distance <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>, then some at distance <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>d</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">d + 1</annotation></semantics></math>, and never anything else. So vertices are taken from it in order of distance, and a vertex is always discovered from a neighbor that is as close to the source as any of its neighbors. BFS computes the <em>shortest</em> path, in number of edges, from the source to every reachable vertex.</p>
+<p><strong>What it costs.</strong> Each vertex enters the queue at most once, because it is marked when first discovered. When a vertex leaves the queue, its adjacency list is scanned once. So over the whole run, every vertex is handled once and every edge is examined once (twice, in an undirected graph). The running time is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math>: linear in the size of the graph. You cannot do better and still look at everything.</p>
+<section id="sec:bfs-path" class="level3 unnumbered">
+<h3 class="unnumbered">Recovering the path</h3>
+<p>Knowing that Farid is three introductions away is less useful than knowing who should make them. The <code>parent</code> vector records, for each vertex, the neighbor from which it was discovered. Following parents from any vertex leads back, step by step, to the source, along a shortest path in reverse.</p>
+<div class="listing"><div class="listing-file">code/ch09/algorithms.hpp</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Follow parent links back from target, then reverse.</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> path_to<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&amp;</span> parent<span class="op">,</span> <span class="dt">int</span> source<span class="op">,</span> <span class="dt">int</span> target<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> path<span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> v <span class="op">=</span> target<span class="op">;</span> v <span class="op">!=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span> v <span class="op">=</span> parent<span class="op">[</span>idx<span class="op">(</span>v<span class="op">)])</span> path<span class="op">.</span>push_back<span class="op">(</span>v<span class="op">);</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>reverse<span class="op">(</span>path<span class="op">.</span>begin<span class="op">(),</span> path<span class="op">.</span>end<span class="op">());</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>path<span class="op">.</span>front<span class="op">()</span> <span class="op">!=</span> source<span class="op">)</span> path<span class="op">.</span>clear<span class="op">();</span>   <span class="co">// target was not reachable</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> path<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The parent links form a tree, rooted at the source, containing one shortest path to every reachable vertex: the heavy edges in <a href="#fig:bfs-layers">Figure 9.2</a>. Storing one parent per vertex is a compact way to store all those paths at once.</p>
+</section>
+<section id="sec:implicit" class="level3 unnumbered">
+<h3 class="unnumbered">Graphs that are never built</h3>
+<p>Sometimes the graph is too large to construct, or there is simply no need. A maze drawn on a grid is a graph, with a vertex for each open cell and an edge between adjacent open cells, but the neighbors of a cell can be computed from its coordinates whenever they are wanted.</p>
+<div class="listing"><div class="listing-file">code/ch09/graph_test.cpp</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Fewest steps from (r0, c0) to (r1, c1) in a grid where &#39;#&#39; is a wall,</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="co">// moving up, down, left or right. Returns -1 if there is no route.</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">// The graph is never built: a cell&#39;s neighbours are computed on demand.</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> maze_steps<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">&gt;&amp;</span> grid<span class="op">,</span> <span class="dt">int</span> r0<span class="op">,</span> <span class="dt">int</span> c0<span class="op">,</span> <span class="dt">int</span> r1<span class="op">,</span> <span class="dt">int</span> c1<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> rows <span class="op">=</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>grid<span class="op">.</span>size<span class="op">());</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> cols <span class="op">=</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>grid<span class="op">[</span><span class="dv">0</span><span class="op">].</span>size<span class="op">());</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&gt;</span> dist<span class="op">(</span>grid<span class="op">.</span>size<span class="op">(),</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>grid<span class="op">[</span><span class="dv">0</span><span class="op">].</span>size<span class="op">(),</span> <span class="op">-</span><span class="dv">1</span><span class="op">));</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>queue<span class="op">&lt;</span><span class="bu">std::</span>pair<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span> <span class="dt">int</span><span class="op">&gt;&gt;</span> frontier<span class="op">;</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    dist<span class="op">[</span>idx<span class="op">(</span>r0<span class="op">)][</span>idx<span class="op">(</span>c0<span class="op">)]</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    frontier<span class="op">.</span>push<span class="op">({</span>r0<span class="op">,</span> c0<span class="op">});</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> dr<span class="op">[]</span> <span class="op">=</span> <span class="op">{-</span><span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">};</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> dc<span class="op">[]</span> <span class="op">=</span> <span class="op">{</span><span class="dv">0</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span><span class="op">,</span> <span class="dv">1</span><span class="op">};</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(!</span>frontier<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> <span class="op">[</span>r<span class="op">,</span> c<span class="op">]</span> <span class="op">=</span> frontier<span class="op">.</span>front<span class="op">();</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        frontier<span class="op">.</span>pop<span class="op">();</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>r <span class="op">==</span> r1 <span class="op">&amp;&amp;</span> c <span class="op">==</span> c1<span class="op">)</span> <span class="cf">return</span> dist<span class="op">[</span>idx<span class="op">(</span>r<span class="op">)][</span>idx<span class="op">(</span>c<span class="op">)];</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> k <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> k <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> <span class="op">++</span>k<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> nr <span class="op">=</span> r <span class="op">+</span> dr<span class="op">[</span>k<span class="op">],</span> nc <span class="op">=</span> c <span class="op">+</span> dc<span class="op">[</span>k<span class="op">];</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>nr <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> nr <span class="op">&gt;=</span> rows <span class="op">||</span> nc <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> nc <span class="op">&gt;=</span> cols<span class="op">)</span> <span class="cf">continue</span><span class="op">;</span>   <span class="co">// off the grid</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>grid<span class="op">[</span>idx<span class="op">(</span>nr<span class="op">)][</span>idx<span class="op">(</span>nc<span class="op">)]</span> <span class="op">==</span> <span class="ch">&#39;#&#39;</span><span class="op">)</span> <span class="cf">continue</span><span class="op">;</span>                  <span class="co">// a wall</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>dist<span class="op">[</span>idx<span class="op">(</span>nr<span class="op">)][</span>idx<span class="op">(</span>nc<span class="op">)]</span> <span class="op">!=</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span> <span class="cf">continue</span><span class="op">;</span>                   <span class="co">// seen already</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>            dist<span class="op">[</span>idx<span class="op">(</span>nr<span class="op">)][</span>idx<span class="op">(</span>nc<span class="op">)]</span> <span class="op">=</span> dist<span class="op">[</span>idx<span class="op">(</span>r<span class="op">)][</span>idx<span class="op">(</span>c<span class="op">)]</span> <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>            frontier<span class="op">.</span>push<span class="op">({</span>nr<span class="op">,</span> nc<span class="op">});</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>This is the same BFS, with “for each neighbor” replaced by “for each of the four directions that stays on the grid and is not a wall.” A graph like this is called <strong>implicit</strong>. The technique applies to any puzzle or game: a vertex is a configuration (the arrangement of a sliding puzzle, the state of a Rubik’s cube), an edge is a legal move, and BFS finds the solution with the fewest moves. The graph of all configurations may be astronomically large. The search builds only the part it visits.</p>
+</section>
+</section>
+<section id="sec:dfs" class="level2">
+<h2><span class="secnum">9.3</span> Depth-first search</h2>
+<p>Breadth-first search is cautious: it explores everything nearby before venturing further. <strong>Depth-first search</strong>, or DFS, is the opposite. It follows a path as far as it can go, and only when it reaches a dead end does it back up to the most recent vertex with an unexplored neighbor and try another way. It is how you would explore a maze on foot, with chalk to mark where you had been.</p>
+<p>“Back up to the most recent” is the behavior of a stack, and the simplest way to get one is to use the call stack, by writing the search recursively.</p>
+<div class="listing"><div class="listing-file">code/ch09/algorithms.hpp</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Visit everything reachable from u that has not been visited, depth first.</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> <span class="dt">void</span> dfs<span class="op">(</span><span class="at">const</span> Graph<span class="op">&amp;</span> g<span class="op">,</span> <span class="dt">int</span> u<span class="op">,</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">bool</span><span class="op">&gt;&amp;</span> visited<span class="op">,</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&amp;</span> order<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    visited<span class="op">[</span>idx<span class="op">(</span>u<span class="op">)]</span> <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    order<span class="op">.</span>push_back<span class="op">(</span>u<span class="op">);</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> Edge<span class="op">&amp;</span> e <span class="op">:</span> g<span class="op">.</span>neighbors<span class="op">(</span>u<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!</span>visited<span class="op">[</span>idx<span class="op">(</span>e<span class="op">.</span>to<span class="op">)])</span> dfs<span class="op">(</span>g<span class="op">,</span> e<span class="op">.</span>to<span class="op">,</span> visited<span class="op">,</span> order<span class="op">);</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Mark the vertex; then, for each neighbor not yet visited, search from <em>there</em> before looking at the next neighbor. When the recursive call returns, everything reachable through that neighbor has been visited.</p>
+<p>Like BFS, DFS visits each vertex once and examines each edge once: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math>. It does not find shortest paths. What it offers instead is that it finishes exploring everything below a vertex before it leaves that vertex, and several problems are naturally solved by that structure.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 9.2</span></p>
+<p>Compare <code>bfs</code> and <code>dfs</code> with the <code>level_order</code> and <code>pre_order</code> tree traversals of <a href="06-trees.html#sec:trees">Section 6.2</a>. What corresponds to what? What did the tree traversals not need that the graph searches do?</p>
+<details class="answer"><summary>Answer</summary>
+<p>Level-order is BFS: a queue of discovered-but-unprocessed nodes. Pre-order is DFS: recursion, going deep first. A tree is a graph with no cycles and exactly one path to each node, so a tree traversal can never arrive at a node twice. A graph search can, which is why it needs the visited marks. A tree traversal is a graph search that gets to skip the bookkeeping.</p>
+</details>
+</aside>
+<section id="sec:components" class="level3 unnumbered">
+<h3 class="unnumbered">Connected components</h3>
+<p>A search from one vertex of an undirected graph visits exactly the vertices in that vertex’s connected component. To find all the components, start a search from each vertex that no earlier search has reached.</p>
+<div class="listing"><div class="listing-file">code/ch09/algorithms.hpp</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Number of connected components of an undirected graph.</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> <span class="dt">int</span> count_components<span class="op">(</span><span class="at">const</span> Graph<span class="op">&amp;</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">bool</span><span class="op">&gt;</span> visited<span class="op">(</span>idx<span class="op">(</span>g<span class="op">.</span>size<span class="op">()),</span> <span class="kw">false</span><span class="op">);</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> order<span class="op">;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> components <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> v <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> v <span class="op">&lt;</span> g<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!</span>visited<span class="op">[</span>idx<span class="op">(</span>v<span class="op">)])</span> <span class="op">{</span>       <span class="co">// v is in a component we have not explored</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>            <span class="op">++</span>components<span class="op">;</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>            dfs<span class="op">(</span>g<span class="op">,</span> v<span class="op">,</span> visited<span class="op">,</span> order<span class="op">);</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> components<span class="op">;</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The outer loop looks as though it might make this quadratic, but it does not: the visited marks persist across the searches, so each vertex is still visited once and each edge examined once in total.</p>
+</section>
+<section id="sec:topo" class="level3 unnumbered">
+<h3 class="unnumbered">Ordering tasks: topological sort</h3>
+<p>Suppose the vertices are tasks and a directed edge from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math> means “<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> must be done before <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math>.” Courses and their prerequisites are the classic example. So are the steps of a recipe, the source files of a program that must be compiled before the files that include them, and the cells of a spreadsheet that must be recalculated before the cells that refer to them.</p>
+<figure class="fig" id="fig:topo"><svg class="figsvg" viewBox="0 0 640 170" width="640" height="170" role="img" aria-label="Six courses in a row, in an order where every prerequisite arrow points right." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-accent-soft" x="8.0" y="66.0" width="84" height="40" rx="6" stroke-width="1.3"/>
+<text class="t-ink" x="50.0" y="86.0" text-anchor="middle" dominant-baseline="central" font-size="12">Intro</text>
+<rect class="s-ink f-accent-soft" x="108.0" y="66.0" width="84" height="40" rx="6" stroke-width="1.3"/>
+<text class="t-ink" x="150.0" y="78.0" text-anchor="middle" dominant-baseline="central" font-size="12">Discrete</text>
+<text class="t-ink" x="150.0" y="94.0" text-anchor="middle" dominant-baseline="central" font-size="12">Math</text>
+<rect class="s-ink f-accent-soft" x="208.0" y="66.0" width="84" height="40" rx="6" stroke-width="1.3"/>
+<text class="t-ink" x="250.0" y="86.0" text-anchor="middle" dominant-baseline="central" font-size="12">Systems</text>
+<rect class="s-ink f-accent-soft" x="308.0" y="66.0" width="84" height="40" rx="6" stroke-width="1.3"/>
+<text class="t-ink" x="350.0" y="78.0" text-anchor="middle" dominant-baseline="central" font-size="12">Data</text>
+<text class="t-ink" x="350.0" y="94.0" text-anchor="middle" dominant-baseline="central" font-size="12">Structures</text>
+<rect class="s-ink f-accent-soft" x="420.0" y="66.0" width="84" height="40" rx="6" stroke-width="1.3"/>
+<text class="t-ink" x="462.0" y="78.0" text-anchor="middle" dominant-baseline="central" font-size="12">Operating</text>
+<text class="t-ink" x="462.0" y="94.0" text-anchor="middle" dominant-baseline="central" font-size="12">Systems</text>
+<rect class="s-ink f-accent-soft" x="536.0" y="66.0" width="84" height="40" rx="6" stroke-width="1.3"/>
+<text class="t-ink" x="578.0" y="86.0" text-anchor="middle" dominant-baseline="central" font-size="12">Algorithms</text>
+<path class="s-ink f-none" d="M60.0,66.0 Q150.0,8.0 240.0,65.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="240.0,65.0 234.3,57.1 230.5,63.2"/>
+<path class="s-ink f-none" d="M60.0,106.0 Q200.0,168.0 340.0,107.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="340.0,107.0 330.3,107.3 333.2,113.9"/>
+<path class="s-ink f-none" d="M260.0,66.0 Q356.0,6.1 452.0,65.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="452.0,65.0 446.2,57.2 442.4,63.4"/>
+<line class="s-ink f-none" x1="392.0" y1="86.0" x2="413.0" y2="86.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="419.0,86.0 410.0,82.4 410.0,89.6"/>
+<path class="s-ink f-none" d="M360.0,106.0 Q464.0,159.4 568.0,107.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="568.0,107.0 558.3,107.8 561.6,114.3"/>
+<path class="s-ink f-none" d="M160.0,66.0 Q364.0,-28.5 568.0,65.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="568.0,65.0 561.3,58.0 558.3,64.5"/>
+</svg><figcaption>
+<span class="fignum">Figure 9.3</span> A prerequisite graph and one topological order of it. Every edge points from left to right, so taking the courses in this order never violates a prerequisite. There are usually several valid orders.
+</figcaption></figure>
+<p>A <strong>topological order</strong> of a directed graph is a listing of its vertices in which every edge points from an earlier vertex to a later one. Such an order exists exactly when the graph has no directed cycle. (If <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> must precede <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>v</mi><annotation encoding="application/x-tex">v</annotation></semantics></math> must precede <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math>, nothing can be done.) A directed graph with no cycles is called a <strong>directed acyclic graph</strong>, or DAG, and DAGs are everywhere that dependencies are.</p>
+<p>One algorithm follows the way you would actually plan your courses. Find a course with no prerequisites, and take it. That frees up any course for which it was the last unmet prerequisite. Repeat.</p>
+<div class="listing"><div class="listing-file">code/ch09/algorithms.hpp</div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">// An ordering of a directed graph&#39;s vertices in which every edge points</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="co">// forward. Returns an empty vector if the graph has a cycle (no such order).</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> topological_order<span class="op">(</span><span class="at">const</span> Graph<span class="op">&amp;</span> g<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> indegree<span class="op">(</span>idx<span class="op">(</span>g<span class="op">.</span>size<span class="op">()),</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> u <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> u <span class="op">&lt;</span> g<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>u<span class="op">)</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> Edge<span class="op">&amp;</span> e <span class="op">:</span> g<span class="op">.</span>neighbors<span class="op">(</span>u<span class="op">))</span> <span class="op">++</span>indegree<span class="op">[</span>idx<span class="op">(</span>e<span class="op">.</span>to<span class="op">)];</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> ready<span class="op">;</span>                       <span class="co">// vertices with no unmet prerequisites</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> v <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> v <span class="op">&lt;</span> g<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>v<span class="op">)</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>indegree<span class="op">[</span>idx<span class="op">(</span>v<span class="op">)]</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> ready<span class="op">.</span>push<span class="op">(</span>v<span class="op">);</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> order<span class="op">;</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(!</span>ready<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> u <span class="op">=</span> ready<span class="op">.</span>front<span class="op">();</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>        ready<span class="op">.</span>pop<span class="op">();</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>        order<span class="op">.</span>push_back<span class="op">(</span>u<span class="op">);</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> Edge<span class="op">&amp;</span> e <span class="op">:</span> g<span class="op">.</span>neighbors<span class="op">(</span>u<span class="op">))</span> <span class="op">{</span>   <span class="co">// u is done: release its successors</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(--</span>indegree<span class="op">[</span>idx<span class="op">(</span>e<span class="op">.</span>to<span class="op">)]</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> ready<span class="op">.</span>push<span class="op">(</span>e<span class="op">.</span>to<span class="op">);</span></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>order<span class="op">.</span>size<span class="op">()</span> <span class="op">!=</span> idx<span class="op">(</span>g<span class="op">.</span>size<span class="op">()))</span> order<span class="op">.</span>clear<span class="op">();</span>   <span class="co">// something never became ready</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> order<span class="op">;</span></span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The algorithm first counts, for each vertex, how many edges point into it: its <strong>in-degree</strong>. The vertices with in-degree zero are ready. Each time a vertex is output, the in-degrees of its successors are decremented, and any that reach zero become ready. If the graph has a cycle, the vertices on the cycle never become ready, the queue runs dry early, and the function reports failure by returning an empty order. So this algorithm also <em>detects</em> cycles. Its cost is again <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math>.</p>
+<div class="listing"><div class="listing-file">code/ch09/graph_test.cpp</div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Edges point from a prerequisite to the course that requires it.</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">enum</span> <span class="op">{</span> Intro<span class="op">,</span> Systems<span class="op">,</span> DataStructures<span class="op">,</span> DiscreteMath<span class="op">,</span> OperatingSystems<span class="op">,</span> Algorithms <span class="op">};</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>Graph prereq<span class="op">(</span><span class="dv">6</span><span class="op">);</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>prereq<span class="op">.</span>add_edge<span class="op">(</span>Intro<span class="op">,</span> Systems<span class="op">);</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>prereq<span class="op">.</span>add_edge<span class="op">(</span>Intro<span class="op">,</span> DataStructures<span class="op">);</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>prereq<span class="op">.</span>add_edge<span class="op">(</span>Systems<span class="op">,</span> OperatingSystems<span class="op">);</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>prereq<span class="op">.</span>add_edge<span class="op">(</span>DataStructures<span class="op">,</span> OperatingSystems<span class="op">);</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>prereq<span class="op">.</span>add_edge<span class="op">(</span>DataStructures<span class="op">,</span> Algorithms<span class="op">);</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>prereq<span class="op">.</span>add_edge<span class="op">(</span>DiscreteMath<span class="op">,</span> Algorithms<span class="op">);</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> plan <span class="op">=</span> topological_order<span class="op">(</span>prereq<span class="op">);</span></span></code></pre></div>
+</div>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>Topological ordering runs constantly in the software you use. Build tools such as <code>make</code> and package managers use it to decide what to compile or install first. Spreadsheets use it to recalculate cells. And it is at the center of how neural networks are trained: the arithmetic that a model performs is recorded as a DAG of operations, and the training algorithm, backpropagation, computes its results by walking that graph in <em>reverse</em> topological order, so that each operation’s contribution is known before it is needed by the operations that fed into it.</p>
+</aside>
+</section>
+</section>
+<section id="sec:dijkstra" class="level2">
+<h2><span class="secnum">9.4</span> Shortest paths with weights</h2>
+<p>Breadth-first search finds the path with the fewest edges. On a road map that is the route with the fewest road segments, which is not what anyone wants. When edges have weights, the length of a path is the <em>sum</em> of its weights, and the shortest path may well use more edges.</p>
+<p>The classic algorithm for this was devised by Edsger Dijkstra in 1956, by his own account in about twenty minutes at a café table <span class="citation" data-cites="dijkstra1959">(<a href="#ref-dijkstra1959" role="doc-biblioref">Dijkstra 1959</a>)</span>. It works whenever <strong>no edge has a negative weight</strong>.</p>
+<p>The idea is to generalize BFS’s waves. BFS processes vertices in order of their distance from the source, and that worked because the next-closest vertex was always at the front of a queue. With weights, the vertices still need to be processed in order of distance, but the next-closest one is no longer simply the oldest. We need a structure that hands over the <em>closest</em> unprocessed vertex each time: a priority queue.</p>
+<p>Keep, for every vertex, the length of the shortest path to it found <em>so far</em>, initially infinity. Repeatedly take the unprocessed vertex with the smallest such distance. That distance is now final; we say the vertex is <strong>settled</strong>. Then look at each edge leaving it: if going through this vertex and along that edge gives a shorter route to the neighbor than any found before, record the improvement. This update is called <strong>relaxing</strong> the edge.</p>
+<div class="listing"><div class="listing-file">code/ch09/algorithms.hpp</div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> <span class="dt">double</span> INF <span class="op">=</span> <span class="bu">std::</span>numeric_limits<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;::</span>infinity<span class="op">();</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Shortest-path distances from source. All edge weights must be &gt;= 0.</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> dijkstra<span class="op">(</span><span class="at">const</span> Graph<span class="op">&amp;</span> g<span class="op">,</span> <span class="dt">int</span> source<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> dist<span class="op">(</span>idx<span class="op">(</span>g<span class="op">.</span>size<span class="op">()),</span> INF<span class="op">);</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">using</span> Item <span class="op">=</span> <span class="bu">std::</span>pair<span class="op">&lt;</span><span class="dt">double</span><span class="op">,</span> <span class="dt">int</span><span class="op">&gt;;</span>                       <span class="co">// (distance, vertex)</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>priority_queue<span class="op">&lt;</span>Item<span class="op">,</span> <span class="bu">std::</span>vector<span class="op">&lt;</span>Item<span class="op">&gt;,</span> <span class="bu">std::</span>greater<span class="op">&lt;</span>Item<span class="op">&gt;&gt;</span> pq<span class="op">;</span>   <span class="co">// min-heap</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    dist<span class="op">[</span>idx<span class="op">(</span>source<span class="op">)]</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    pq<span class="op">.</span>push<span class="op">({</span><span class="fl">0.0</span><span class="op">,</span> source<span class="op">});</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(!</span>pq<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> <span class="op">[</span>d<span class="op">,</span> u<span class="op">]</span> <span class="op">=</span> pq<span class="op">.</span>top<span class="op">();</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>        pq<span class="op">.</span>pop<span class="op">();</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>d <span class="op">&gt;</span> dist<span class="op">[</span>idx<span class="op">(</span>u<span class="op">)])</span> <span class="cf">continue</span><span class="op">;</span>          <span class="co">// a stale entry: u was already settled</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> Edge<span class="op">&amp;</span> e <span class="op">:</span> g<span class="op">.</span>neighbors<span class="op">(</span>u<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>            <span class="dt">double</span> candidate <span class="op">=</span> d <span class="op">+</span> e<span class="op">.</span>weight<span class="op">;</span></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>candidate <span class="op">&lt;</span> dist<span class="op">[</span>idx<span class="op">(</span>e<span class="op">.</span>to<span class="op">)])</span> <span class="op">{</span>   <span class="co">// found a shorter way to e.to</span></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>                dist<span class="op">[</span>idx<span class="op">(</span>e<span class="op">.</span>to<span class="op">)]</span> <span class="op">=</span> candidate<span class="op">;</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>                pq<span class="op">.</span>push<span class="op">({</span>candidate<span class="op">,</span> e<span class="op">.</span>to<span class="op">});</span></span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> dist<span class="op">;</span></span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The priority queue holds pairs of (distance, vertex), ordered by distance, smallest first. (Recall from <a href="08-heaps-sorting.html#sec:heap">Section 8.1</a> that <code>std::priority_queue</code> needs <code>std::greater</code> to behave as a min-heap.)</p>
+<p>One practical detail deserves a comment. When a shorter route to a vertex is found, the ideal would be to lower that vertex’s priority where it sits in the heap. The standard priority queue has no such operation. So the code simply pushes a <em>second</em> entry for the vertex, with the better distance, and leaves the old one in place. The better entry will come out first. When the outdated one eventually surfaces, it is recognized, because its distance is greater than the one now on record, and skipped. That is the meaning of the line marked “a stale entry.” This trick is known as <em>lazy deletion</em>, and it is the usual way to write Dijkstra’s algorithm in practice.</p>
+<div class="listing"><div class="listing-file">code/ch09/graph_test.cpp</div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>Graph roads<span class="op">(</span><span class="dv">5</span><span class="op">);</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>roads<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">4</span><span class="op">);</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>roads<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>roads<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>roads<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">5</span><span class="op">);</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>roads<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">8</span><span class="op">);</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>roads<span class="op">.</span>add_undirected<span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> d <span class="op">=</span> dijkstra<span class="op">(</span>roads<span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span></code></pre></div>
+</div>
+<figure class="fig viz" id="fig:graph"><div class="viz-widget" data-viz="graph"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 230" width="640" height="230" role="img" aria-label="A weighted graph with shortest-path distances from vertex 0." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="95.6" y1="108.3" x2="224.4" y2="52.7" stroke-width="1.2"/>
+<text class="t-accent2 mono b" x="164.8" y="91.5" text-anchor="middle" dominant-baseline="central" font-size="12">4</text>
+<line class="s-accent f-none" x1="95.2" y1="122.7" x2="204.8" y2="178.3" stroke-width="2.6"/>
+<text class="t-accent2 mono b" x="144.6" y="161.2" text-anchor="middle" dominant-baseline="central" font-size="12">1</text>
+<line class="s-accent f-none" x1="222.4" y1="169.2" x2="237.6" y2="62.8" stroke-width="2.6"/>
+<text class="t-accent2 mono b" x="241.9" y="117.7" text-anchor="middle" dominant-baseline="central" font-size="12">2</text>
+<line class="s-accent f-none" x1="255.8" y1="52.4" x2="394.2" y2="108.6" stroke-width="2.6"/>
+<text class="t-accent2 mono b" x="320.5" y="91.6" text-anchor="middle" dominant-baseline="central" font-size="12">5</text>
+<line class="s-ink f-none" x1="235.9" y1="180.0" x2="394.1" y2="121.0" stroke-width="1.2"/>
+<text class="t-accent2 mono b" x="319.2" y="161.7" text-anchor="middle" dominant-baseline="central" font-size="12">8</text>
+<line class="s-accent f-none" x1="427.0" y1="115.0" x2="543.0" y2="115.0" stroke-width="2.6"/>
+<text class="t-accent2 mono b" x="485.0" y="127.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<circle class="s-accent2 f-accent-soft" cx="80" cy="115" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="80.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13">0</text>
+<circle class="s-ink f-accent-soft" cx="240" cy="46" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="240.0" y="46.0" text-anchor="middle" dominant-baseline="central" font-size="13">1</text>
+<circle class="s-ink f-accent-soft" cx="220" cy="186" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="220.0" y="186.0" text-anchor="middle" dominant-baseline="central" font-size="13">2</text>
+<circle class="s-ink f-accent-soft" cx="410" cy="115" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="410.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13">3</text>
+<circle class="s-ink f-accent-soft" cx="560" cy="115" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="560.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13">4</text>
+<text class="t-accent b" x="80.0" y="147.0" text-anchor="middle" dominant-baseline="central" font-size="12">dist 0</text>
+<text class="t-accent b" x="240.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="12">dist 3</text>
+<text class="t-accent b" x="220.0" y="218.0" text-anchor="middle" dominant-baseline="central" font-size="12">dist 1</text>
+<text class="t-accent b" x="410.0" y="147.0" text-anchor="middle" dominant-baseline="central" font-size="12">dist 8</text>
+<text class="t-accent b" x="560.0" y="147.0" text-anchor="middle" dominant-baseline="central" font-size="12">dist 11</text>
+<text class="t-accent2 b" x="80.0" y="76.0" text-anchor="middle" dominant-baseline="central" font-size="11">source</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 9.4</span> Dijkstra’s algorithm on a small road network, complete. Each vertex shows its final distance from vertex 0, and the heavy edges form the tree of shortest paths. Note that the best route from 0 to 1 goes through 2, with total weight 3, and not along the direct edge of weight 4. In the web edition, step through breadth-first search, depth-first search, and Dijkstra’s algorithm on this and other graphs, and watch the queue, stack, or priority queue as it changes.
+</figcaption></figure>
+<p>Here is the run on that graph, step by step.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: center;">Step</th>
+<th style="text-align: left;">Popped</th>
+<th style="text-align: left;">Action</th>
+<th style="text-align: left;">Distances to 0, 1, 2, 3, 4</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;"></td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">start</td>
+<td style="text-align: left;">0, ∞, ∞, ∞, ∞</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">1</td>
+<td style="text-align: left;">(0, vertex 0)</td>
+<td style="text-align: left;">relax 0→1 to 4; relax 0→2 to 1</td>
+<td style="text-align: left;">0, 4, 1, ∞, ∞</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">2</td>
+<td style="text-align: left;">(1, vertex 2)</td>
+<td style="text-align: left;">relax 2→1 to 3; relax 2→3 to 9</td>
+<td style="text-align: left;">0, 3, 1, 9, ∞</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">3</td>
+<td style="text-align: left;">(3, vertex 1)</td>
+<td style="text-align: left;">relax 1→3 to 8</td>
+<td style="text-align: left;">0, 3, 1, 8, ∞</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">4</td>
+<td style="text-align: left;">(4, vertex 1)</td>
+<td style="text-align: left;">stale: skip</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">5</td>
+<td style="text-align: left;">(8, vertex 3)</td>
+<td style="text-align: left;">relax 3→4 to 11</td>
+<td style="text-align: left;">0, 3, 1, 8, 11</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">6</td>
+<td style="text-align: left;">(9, vertex 3)</td>
+<td style="text-align: left;">stale: skip</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">7</td>
+<td style="text-align: left;">(11, vertex 4)</td>
+<td style="text-align: left;">nothing to improve</td>
+<td style="text-align: left;">0, 3, 1, 8, 11</td>
+</tr>
+</tbody>
+</table>
+<section id="sec:dijkstra-why" class="level3 unnumbered">
+<h3 class="unnumbered">Why it works, and when it does not</h3>
+<p>The crucial claim is that when a vertex is taken from the priority queue (and is not stale), its recorded distance is truly the shortest. Why can no shorter route turn up later?</p>
+<p>Suppose vertex <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> is popped with distance <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>. Any other route to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> would have to leave the set of already-settled vertices at some point, passing through some vertex <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> that is still in the queue. But <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> was the <em>closest</em> thing in the queue, so the distance to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> is at least <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>. The rest of the route, from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> on to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math>, can only add to that. So no route through <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> is shorter than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>.</p>
+<p>Look at the last step of that argument: “can only add.” It assumes that edge weights are not negative. With a negative edge, a route that wanders further away could come back shorter, and a vertex could be settled too soon.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 9.3</span></p>
+<p>Consider a directed graph with edges A→B of weight 1, A→C of weight 3, and C→B of weight <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mn>5</mn></mrow><annotation encoding="application/x-tex">-5</annotation></semantics></math>. What distance does Dijkstra’s algorithm, as written, settle for B on first popping it? What is the true shortest distance?</p>
+<details class="answer"><summary>Answer</summary>
+<p>Dijkstra’s algorithm pops B first, with distance 1, since it is the closest. The true shortest path is A→C→B, with length <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>3</mn><mo>+</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>−</mo><mn>5</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mo>−</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">3 + (-5) = -2</annotation></semantics></math>. With this lazy-deletion implementation the later relaxation would push a new entry for B and the final number would happen to come out right in this tiny case, but anything computed <em>from</em> B in the meantime would have used the wrong value, and in general the algorithm’s guarantee is gone. Graphs with negative edges need a different algorithm (Bellman–Ford), which you will meet in an algorithms course.</p>
+</details>
+</aside>
+</section>
+<section id="sec:dijkstra-cost" class="level3 unnumbered">
+<h3 class="unnumbered">What it costs</h3>
+<p>Every edge can cause at most one push onto the priority queue, so the queue never holds more than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>E</mi><annotation encoding="application/x-tex">E</annotation></semantics></math> entries, and each push or pop costs <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log E)</annotation></semantics></math>, which is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>V</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log V)</annotation></semantics></math>. The total is</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo minsize="1.2" maxsize="1.2" stretchy="false" form="prefix">(</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>log</mo><mi>V</mi><mo minsize="1.2" maxsize="1.2" stretchy="false" form="postfix">)</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">O\big((V + E) \log V\big).</annotation></semantics></math></p>
+<p>Before heaps were in common use, the algorithm was implemented by scanning an array of all the vertices to find the closest unsettled one, which takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>V</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V^2)</annotation></semantics></math> time in total. On sparse graphs the difference is dramatic.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Vertices (5 edges each)</th>
+<th style="text-align: right;">Array scan</th>
+<th style="text-align: right;">Priority queue</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">2,000</td>
+<td style="text-align: right;">0.005 s</td>
+<td style="text-align: right;">0.0002 s</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">8,000</td>
+<td style="text-align: right;">0.086 s</td>
+<td style="text-align: right;">0.0011 s</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">32,000</td>
+<td style="text-align: right;">2.2 s</td>
+<td style="text-align: right;">0.0058 s</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">128,000</td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;">0.027 s</td>
+</tr>
+</tbody>
+</table>
+<p>Quadrupling the graph multiplies the array-scan time by about twenty and the heap time by about five. The same algorithm, with a better data structure inside it, goes from unusable to instantaneous. That is the reason this is a course in data structures.</p>
+<aside class="callout byhand"><p class="callout-title"><span class="lab">By hand first</span></p>
+<p>On paper, run Dijkstra’s algorithm on a weighted graph of six or seven vertices that you draw yourself, from a source of your choosing. Keep a table like the one above: what was popped, what was relaxed, the distance array, and the contents of the priority queue after each step, including stale entries. Then run BFS on the same graph, ignoring weights, and compare the two shortest-path trees.</p>
+<p>Then check your work by running the code, not by asking a model to “trace Dijkstra on this graph.” A language model produces a trace by predicting what such a trace looks like, and over a dozen steps of carefully interdependent state it is quite capable of relaxing an edge that does not exist or losing an entry from the queue, while the prose around the error remains perfectly confident. For anything beyond a toy, the reliable way to get an algorithm’s output from a model is to have it write the program and then run the program yourself.</p>
+</aside>
+</section>
+</section>
+<section id="sec:union-find" class="level2">
+<h2><span class="secnum">9.5</span> Union-find</h2>
+<p>The last structure of the chapter solves a narrower problem than the searches do, and solves it almost unbelievably well.</p>
+<p>Suppose a graph is being built up one edge at a time, and at any moment you may be asked: are these two vertices connected yet? This is the <strong>dynamic connectivity</strong> problem. Running a new search for every question would take linear time per question. But we do not need paths. We need only to know which vertices are in the same component, and to be able to merge two components when an edge joins them.</p>
+<p>The abstract data type is called <strong>disjoint sets</strong>, or <strong>union-find</strong> after its two operations.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>find(x)</code></td>
+<td style="text-align: left;">return a representative element of the set containing <code>x</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>unite(a, b)</code></td>
+<td style="text-align: left;">merge the sets containing <code>a</code> and <code>b</code></td>
+</tr>
+</tbody>
+</table>
+<p>Two elements are in the same set exactly when <code>find</code> returns the same representative for both.</p>
+<p>The representation is a forest: each set is a tree, in which every element points to a <strong>parent</strong>, and the root of the tree, which is its own parent, is the set’s representative. These trees are unusual in two ways. The pointers go <em>up</em>, from child to parent, since the only thing we ever do is climb to the root. And the trees do not need nodes at all. Since elements are numbered 0 through <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n - 1</annotation></semantics></math>, the entire forest is one array: <code>parent[x]</code> is the parent of <code>x</code>.</p>
+<figure class="fig viz" id="fig:unionfind"><div class="viz-widget" data-viz="unionfind"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 260" width="640" height="260" role="img" aria-label="A union-find forest of three trees and the parent array that represents it." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="106.3" y1="87.8" x2="135.8" y2="52.8" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="139.7,48.2 131.1,52.8 136.6,57.4"/>
+<line class="s-ink f-none" x1="193.7" y1="87.8" x2="164.2" y2="52.8" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="160.3,48.2 163.4,57.4 168.9,52.8"/>
+<line class="s-ink f-none" x1="204.0" y1="148.0" x2="204.0" y2="122.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="204.0,116.0 200.4,125.0 207.6,125.0"/>
+<line class="s-ink f-none" x1="329.9" y1="87.4" x2="356.5" y2="53.3" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="360.1,48.6 351.8,53.5 357.4,57.9"/>
+<line class="s-ink f-none" x1="410.1" y1="87.4" x2="383.5" y2="53.3" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="379.9,48.6 382.6,57.9 388.2,53.5"/>
+<circle class="s-accent2 f-accent2-soft" cx="150" cy="36" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="150.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="13">0</text>
+<circle class="s-ink f-paper" cx="96" cy="100" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="96.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="13">1</text>
+<circle class="s-ink f-paper" cx="204" cy="100" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="204.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="13">2</text>
+<circle class="s-ink f-paper" cx="204" cy="164" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="204.0" y="164.0" text-anchor="middle" dominant-baseline="central" font-size="13">3</text>
+<circle class="s-accent2 f-accent2-soft" cx="370" cy="36" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="370.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="13">4</text>
+<circle class="s-ink f-paper" cx="320" cy="100" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="320.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="13">5</text>
+<circle class="s-ink f-paper" cx="420" cy="100" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="420.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="13">6</text>
+<circle class="s-accent2 f-accent2-soft" cx="530" cy="36" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="530.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="13">7</text>
+<text class="t-muted" x="530.0" y="70.0" text-anchor="middle" dominant-baseline="central" font-size="10">a set of one</text>
+<text class="t-accent2" x="150.0" y="10.0" text-anchor="middle" dominant-baseline="central" font-size="10">root</text>
+<rect class="s-ink f-accent2-soft" x="144" y="208" width="44" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="166.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="14">0</text>
+<text class="t-muted mono" x="166.0" y="251.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-ink f-none" x="188" y="208" width="44" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="210.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="14">0</text>
+<text class="t-muted mono" x="210.0" y="251.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-ink f-none" x="232" y="208" width="44" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="254.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="14">0</text>
+<text class="t-muted mono" x="254.0" y="251.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-none" x="276" y="208" width="44" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="298.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<text class="t-muted mono" x="298.0" y="251.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-accent2-soft" x="320" y="208" width="44" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="342.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="14">4</text>
+<text class="t-muted mono" x="342.0" y="251.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-none" x="364" y="208" width="44" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="386.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="14">4</text>
+<text class="t-muted mono" x="386.0" y="251.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-none" x="408" y="208" width="44" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="430.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="14">4</text>
+<text class="t-muted mono" x="430.0" y="251.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-accent2-soft" x="452" y="208" width="44" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="474.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="14">7</text>
+<text class="t-muted mono" x="474.0" y="251.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<text class="t-ink mono" x="132.0" y="224.0" text-anchor="end" dominant-baseline="central" font-size="12">parent</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 9.5</span> A union-find structure over eight elements, shown as a forest and as the <code>parent</code> array that actually stores it. There are three sets, with representatives 0, 4, and 7. In the web edition, unite sets and run <code>find</code>, and watch path compression flatten the trees.
+</figcaption></figure>
+<p><code>find</code> climbs parent links to the root. <code>unite</code> finds the two roots and makes one the parent of the other. That is the whole idea, and in its naive form it has the same flaw as the binary search tree: nothing stops the trees from growing tall and thin, in which case <code>find</code> takes linear time. Two small refinements fix it.</p>
+<p><strong>Union by size.</strong> When merging two trees, always attach the <em>smaller</em> one beneath the root of the larger. An element’s depth increases only when its tree is absorbed into one at least as big, so each time an element gets one level deeper, the size of its tree has at least doubled. That can happen at most <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math> times. The trees have logarithmic height.</p>
+<p><strong>Path compression.</strong> After <code>find</code> has climbed from <code>x</code> to the root, it goes back over the path and points every element on it <em>directly</em> at the root. The next <code>find</code> for any of them takes one step. The tree gets flatter every time it is used.</p>
+<div class="listing"><div class="listing-file">code/ch09/union_find.hpp</div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> UnionFind <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// n elements, 0 .. n-1, each initially in a set by itself.</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> UnionFind<span class="op">(</span><span class="dt">int</span> n<span class="op">)</span> <span class="op">:</span> <span class="va">parent_</span><span class="op">(</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>n<span class="op">)),</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>                                <span class="va">size_</span><span class="op">(</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>n<span class="op">),</span> <span class="dv">1</span><span class="op">),</span> <span class="va">sets_</span><span class="op">(</span>n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>iota<span class="op">(</span><span class="va">parent_</span><span class="op">.</span>begin<span class="op">(),</span> <span class="va">parent_</span><span class="op">.</span>end<span class="op">(),</span> <span class="dv">0</span><span class="op">);</span>   <span class="co">// parent_[i] = i</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// The representative (&quot;root&quot;) of the set containing x.</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> find<span class="op">(</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> root <span class="op">=</span> x<span class="op">;</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="op">(</span>parent<span class="op">(</span>root<span class="op">)</span> <span class="op">!=</span> root<span class="op">)</span> root <span class="op">=</span> parent<span class="op">(</span>root<span class="op">);</span>   <span class="co">// climb to the root</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="op">(</span>parent<span class="op">(</span>x<span class="op">)</span> <span class="op">!=</span> root<span class="op">)</span> <span class="op">{</span>                         <span class="co">// then point every node</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> next <span class="op">=</span> parent<span class="op">(</span>x<span class="op">);</span>                           <span class="co">// on the path straight</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>            parent<span class="op">(</span>x<span class="op">)</span> <span class="op">=</span> root<span class="op">;</span>                               <span class="co">// at it</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>            x <span class="op">=</span> next<span class="op">;</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> root<span class="op">;</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> same<span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> find<span class="op">(</span>a<span class="op">)</span> <span class="op">==</span> find<span class="op">(</span>b<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Merge the sets containing a and b. Returns false if already together.</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> unite<span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> ra <span class="op">=</span> find<span class="op">(</span>a<span class="op">),</span> rb <span class="op">=</span> find<span class="op">(</span>b<span class="op">);</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>ra <span class="op">==</span> rb<span class="op">)</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>size<span class="op">(</span>ra<span class="op">)</span> <span class="op">&lt;</span> size<span class="op">(</span>rb<span class="op">))</span> <span class="bu">std::</span>swap<span class="op">(</span>ra<span class="op">,</span> rb<span class="op">);</span>   <span class="co">// ra is the larger tree</span></span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>        parent<span class="op">(</span>rb<span class="op">)</span> <span class="op">=</span> ra<span class="op">;</span>                              <span class="co">// hang the smaller under it</span></span>
+<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>        size<span class="op">(</span>ra<span class="op">)</span> <span class="op">+=</span> size<span class="op">(</span>rb<span class="op">);</span></span>
+<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>        <span class="op">--</span><span class="va">sets_</span><span class="op">;</span></span>
+<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-34"><a href="#cb12-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> sets<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">sets_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb12-35"><a href="#cb12-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-36"><a href="#cb12-36" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb12-37"><a href="#cb12-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">&amp;</span> parent<span class="op">(</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">parent_</span><span class="op">[</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>x<span class="op">)];</span> <span class="op">}</span></span>
+<span id="cb12-38"><a href="#cb12-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">&amp;</span> size<span class="op">(</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">size_</span><span class="op">[</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>x<span class="op">)];</span> <span class="op">}</span></span>
+<span id="cb12-39"><a href="#cb12-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-40"><a href="#cb12-40" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> <span class="va">parent_</span><span class="op">;</span>   <span class="co">// parent_[x] == x means x is a root</span></span>
+<span id="cb12-41"><a href="#cb12-41" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> <span class="va">size_</span><span class="op">;</span>     <span class="co">// for a root: how many elements in its tree</span></span>
+<span id="cb12-42"><a href="#cb12-42" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> <span class="va">sets_</span><span class="op">;</span></span>
+<span id="cb12-43"><a href="#cb12-43" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<p>With both refinements, the cost of a sequence of operations was determined by Robert Tarjan in 1975, in one of the most celebrated analyses in the field <span class="citation" data-cites="tarjan1975">(<a href="#ref-tarjan1975" role="doc-biblioref">Tarjan 1975</a>)</span>. The amortized cost per operation is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>α</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\alpha(n))</annotation></semantics></math>, where <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math> is the <em>inverse Ackermann function</em>, a function that grows so slowly that <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>≤</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">\alpha(n) \le 4</annotation></semantics></math> for any <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> up to far beyond the number of atoms in the universe. It is not constant. But no computation that could ever be carried out will see it exceed four.</p>
+<p>Here is the difference the two refinements make. The test unites <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements into one long chain, the worst case for the naive version, and then calls <code>find</code> on each.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;">naive</th>
+<th style="text-align: right;">union by size + path compression</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">0.078 s</td>
+<td style="text-align: right;">0.00006 s</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">20,000</td>
+<td style="text-align: right;">0.28 s</td>
+<td style="text-align: right;">0.00011 s</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">40,000</td>
+<td style="text-align: right;">1.1 s</td>
+<td style="text-align: right;">0.00021 s</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">80,000</td>
+<td style="text-align: right;">4.4 s</td>
+<td style="text-align: right;">0.00046 s</td>
+</tr>
+</tbody>
+</table>
+<p>The naive version is quadratic. The refined one is, to the eye, linear: about ten lines of code separate a structure that chokes on eighty thousand elements from one that handles twenty million operations on ten million elements at around 36 nanoseconds apiece.</p>
+<section id="sec:kruskal" class="level3 unnumbered">
+<h3 class="unnumbered">An application: the cheapest network</h3>
+<p>Suppose the vertices are buildings, and each weighted edge is the cost of laying cable between two of them. We want to connect every building, directly or indirectly, as cheaply as possible. The solution is a set of edges that connects all the vertices with no cycles (a cycle would mean a redundant cable) and with the smallest possible total weight: a <strong>minimum spanning tree</strong>.</p>
+<p>Kruskal’s algorithm <span class="citation" data-cites="kruskal1956">(<a href="#ref-kruskal1956" role="doc-biblioref">Kruskal 1956</a>)</span> finds one with a strategy of pure greed. Consider the edges from cheapest to most expensive. Take each edge unless its two endpoints are already connected by edges taken earlier, in which case it would close a cycle, so skip it.</p>
+<div class="listing"><div class="listing-file">code/ch09/graph_test.cpp</div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> WeightedEdge <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> u<span class="op">,</span> v<span class="op">;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> weight<span class="op">;</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Total weight of a minimum spanning tree of a connected undirected graph.</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> mst_weight<span class="op">(</span><span class="dt">int</span> vertices<span class="op">,</span> <span class="bu">std::</span>vector<span class="op">&lt;</span>WeightedEdge<span class="op">&gt;</span> edges<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>ranges::sort<span class="op">(</span>edges<span class="op">,</span> <span class="op">{},</span> <span class="op">&amp;</span>WeightedEdge<span class="op">::</span>weight<span class="op">);</span>   <span class="co">// cheapest first</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    UnionFind uf<span class="op">(</span>vertices<span class="op">);</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> total <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> WeightedEdge<span class="op">&amp;</span> e <span class="op">:</span> edges<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>uf<span class="op">.</span>unite<span class="op">(</span>e<span class="op">.</span>u<span class="op">,</span> e<span class="op">.</span>v<span class="op">))</span> total <span class="op">+=</span> e<span class="op">.</span>weight<span class="op">;</span>   <span class="co">// joins two components: keep it</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span>                                                <span class="co">// else it would close a cycle</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total<span class="op">;</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>“Are these two vertices already connected?” is exactly the question union-find answers, and “now they are” is <code>unite</code>. With it, the algorithm is a sort followed by a single pass: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>E</mi><mo>log</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(E \log E)</annotation></semantics></math> for the sort, and effectively linear for everything else. It is not obvious that so greedy a strategy gives the best possible answer. It does, and the proof belongs to an algorithms course.</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>With graphs, the algorithms are the easy part. The hard part, and the part that makes someone good at this, is <em>modeling</em>: seeing that a problem which never mentions graphs is one. Use a model to practice.</p>
+<blockquote>
+<p>Give me a short word problem, with no mention of graphs or of any algorithm by name, that is best solved by exactly one of: breadth-first search, topological sort, Dijkstra’s algorithm, or union-find. I will tell you what the vertices are, what the edges are, whether they are directed or weighted, and which algorithm applies. Then critique my modeling, especially if there is a better choice of vertices.</p>
+</blockquote>
+<p>Do ten of these. Pay particular attention to problems where a vertex is not a physical thing but a <em>state</em>: a configuration of a puzzle, a position plus the amount of fuel remaining, a set of tasks already completed.</p>
+</aside>
+<p>Here are the chapter’s algorithms side by side.</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Algorithm</th>
+<th style="text-align: left;">Structure at its heart</th>
+<th style="text-align: left;">Cost</th>
+<th style="text-align: left;">Answers</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Breadth-first search</td>
+<td style="text-align: left;">queue</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math></td>
+<td style="text-align: left;">fewest-edge paths; what is reachable</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Depth-first search</td>
+<td style="text-align: left;">stack (recursion)</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math></td>
+<td style="text-align: left;">reachability; components; cycles</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Topological sort</td>
+<td style="text-align: left;">queue, in-degree counts</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math></td>
+<td style="text-align: left;">a valid order for dependencies</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Dijkstra’s algorithm</td>
+<td style="text-align: left;">priority queue</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>log</mo><mi>V</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O((V + E) \log V)</annotation></semantics></math></td>
+<td style="text-align: left;">least-weight paths, weights <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≥</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\ge 0</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Union-find</td>
+<td style="text-align: left;">forest in an array</td>
+<td style="text-align: left;">nearly <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math> per operation</td>
+<td style="text-align: left;">are two things connected yet?</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Kruskal’s algorithm</td>
+<td style="text-align: left;">sort, then union-find</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>E</mi><mo>log</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(E \log E)</annotation></semantics></math></td>
+<td style="text-align: left;">minimum spanning tree</td>
+</tr>
+</tbody>
+</table>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">Graph (adjacency lists)</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+A vector with one entry per vertex, each entry a vector of that vertex’s outgoing edges. Vertices are integers, so they index directly. Space is proportional to vertices plus edges.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+<code>neighbors(u)</code> lists exactly the edges leaving <code>u</code>. An undirected edge is stored as two directed ones, and the two must be kept consistent.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Visiting a vertex’s neighbors takes time proportional to their number. Any algorithm that looks at the whole graph, such as BFS or DFS, takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math>.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+Test each algorithm against a slower, simpler, independent one on many small random graphs: Dijkstra against Bellman–Ford, BFS against Dijkstra with unit weights, Kruskal against a different spanning-tree algorithm. Include disconnected graphs, self-loops, and repeated edges.
+</dd>
+</dl>
+</aside>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">Union-find</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+Two arrays of integers. <code>parent[x]</code> is the element above <code>x</code> in its tree; a root is its own parent. A forest with no nodes and no pointers.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+Two elements are in the same set exactly when climbing from each reaches the same root. With union by size, a tree of height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> has at least <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mrow><mi>h</mi><mo>−</mo><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">2^{h-1}</annotation></semantics></math> elements.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Amortized <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>α</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\alpha(n))</annotation></semantics></math> per operation, where <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>≤</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">\alpha(n) \le 4</annotation></semantics></math> in practice. It cannot split a set or list a set’s members efficiently.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+Compare its answers with connectivity computed by a graph search over the same edges; check that the number of sets equals the number of connected components.
+</dd>
+</dl>
+</aside>
+</section>
+</section>
+<section id="sec:graphs-ex" class="level2 unnumbered">
+<h2 class="unnumbered">Exercises</h2>
+<ol type="1">
+<li><p>Draw the directed graph with vertices 0 through 5 and edges 0→1, 0→3, 1→2, 1→3, 3→4, 4→1, 5→4. Give its adjacency lists and its adjacency matrix. Does it contain a cycle? Which vertices are reachable from 5? From 2?</p></li>
+<li><p>For each scenario, say what the vertices and edges are, whether the graph is directed and whether it is weighted, and whether you would expect it to be sparse or dense: (a) flights between airports; (b) which pairs of students have a class together; (c) the “follows” relation on a social network; (d) the squares of a chessboard and a knight’s moves; (e) the tiles of a sliding puzzle.</p></li>
+<li><p>Run breadth-first search by hand on the graph of <a href="#fig:graph-rep">Figure 9.1</a> starting from vertex 5. Give the order in which vertices are removed from the queue, and the final <code>dist</code> and <code>parent</code> arrays. Then give the order in which <code>dfs</code> visits vertices starting from 5.</p></li>
+<li><p>A graph has <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>V</mi><annotation encoding="application/x-tex">V</annotation></semantics></math> vertices and is stored as an adjacency matrix. What is the running time of BFS? Explain why it differs from the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math> of the adjacency-list version.</p></li>
+<li><p>Rewrite <code>dfs</code> without recursion, using an explicit <code>std::stack&lt;int&gt;</code>. Does your version visit vertices in the same order as the recursive one? If not, what would you change to make it do so? Why might an iterative version be necessary for a very large graph?</p></li>
+<li><p>An undirected graph is <strong>bipartite</strong> if its vertices can be colored with two colors so that every edge joins vertices of different colors. Write a function that determines whether a graph is bipartite, using BFS. (What must be true of the distances of two adjacent vertices?)</p></li>
+<li><p>Give all the valid topological orders of the course graph in <a href="#sec:dfs">Section 9.3</a>. Then add the smallest set of edges you can that leaves exactly one valid order.</p></li>
+<li><p>Run Dijkstra’s algorithm by hand on the <code>roads</code> graph from the source vertex 4, with a table like the one in <a href="#sec:dijkstra">Section 9.4</a>. Which entries in the priority queue turn out to be stale?</p></li>
+<li><p>Modify <code>dijkstra</code> to return a <code>parent</code> vector as <code>bfs</code> does, so that the shortest paths themselves can be recovered. At exactly which line should a vertex’s parent be recorded?</p></li>
+<li><p>Suppose every edge of a weighted graph has its weight increased by the same constant <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math>. Does the shortest path between two given vertices stay the same? Give a proof or a small counterexample. (This is why “just add a constant to make all the weights positive” does not rescue Dijkstra’s algorithm from negative edges.)</p></li>
+<li><p>Start with elements 0 through 7 in separate sets, and perform <code>unite(0,1)</code>, <code>unite(2,3)</code>, <code>unite(4,5)</code>, <code>unite(6,7)</code>, <code>unite(0,2)</code>, <code>unite(4,6)</code>, <code>unite(0,4)</code>, using union by size, with ties broken as in the code. Draw the forest after each step. Then perform <code>find(7)</code> with path compression and draw the result.</p></li>
+<li><p>Prove that with union by size (and no path compression), a tree of height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> contains at least <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mrow><mi>h</mi><mo>−</mo><mn>1</mn></mrow></msup><annotation encoding="application/x-tex">2^{h-1}</annotation></semantics></math> elements. Conclude that <code>find</code> takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math> time.</p></li>
+<li><p>An image is a grid of pixels, each black or white. Two black pixels belong to the same <em>blob</em> if they are adjacent horizontally or vertically. Write a function that counts the blobs, once using a graph search and once using union-find. Which would you use if pixels were being turned black one at a time and you needed the count after each change?</p></li>
+<li><p><strong>With a model, as critic.</strong> A classic puzzle: you have a 3-liter jug and a 5-liter jug, and you must measure exactly 4 liters. Model it as a graph yourself, on paper: what is a vertex, what is an edge, and what does a shortest path mean? Then ask a model to critique your modeling without solving the puzzle. Finally, write a BFS over your implicit graph that prints the shortest sequence of moves.</p></li>
+<li><p><strong>Lab.</strong> <em>Word ladders.</em> Given a dictionary and two words of the same length, find a shortest sequence of dictionary words leading from one to the other in which each word differs from the previous one in exactly one letter (<code>cold</code>, <code>cord</code>, <code>card</code>, <code>ward</code>, <code>warm</code>). The graph is implicit: a word’s neighbors are the dictionary words one letter away. Use a hash set for the dictionary and BFS for the search. Consider two ways to generate a word’s neighbors, by comparing it with every dictionary word, or by trying every single-letter change and looking each up in the set, and measure both. Report the ladder from <code>stone</code> to <code>money</code>, or the fact that none exists in your dictionary, and the number of words your search discovered along the way.</p></li>
+</ol>
+</section>
+<section id="sec:graphs-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Chapter notes</h2>
+<p>Graph theory is usually dated to Euler’s 1736 solution of the Königsberg bridges problem. The algorithms in this chapter are from the first two decades of computer science: Dijkstra’s shortest-path algorithm <span class="citation" data-cites="dijkstra1959">(<a href="#ref-dijkstra1959" role="doc-biblioref">Dijkstra 1959</a>)</span>, Kahn’s topological sort <span class="citation" data-cites="kahn1962">(<a href="#ref-kahn1962" role="doc-biblioref">Kahn 1962</a>)</span>, Kruskal’s spanning-tree algorithm <span class="citation" data-cites="kruskal1956">(<a href="#ref-kruskal1956" role="doc-biblioref">Kruskal 1956</a>)</span>, and the systematic use of depth-first search by Hopcroft and Tarjan <span class="citation" data-cites="hopcroft1973">(<a href="#ref-hopcroft1973" role="doc-biblioref">Hopcroft and Tarjan 1973</a>)</span>, which earned them a Turing Award. The forest representation of disjoint sets is from Galler and Fischer <span class="citation" data-cites="galler1964">(<a href="#ref-galler1964" role="doc-biblioref">Galler and Fischer 1964</a>)</span>; the two refinements followed within a few years, and the remarkable analysis of the combination is Tarjan’s <span class="citation" data-cites="tarjan1975">(<a href="#ref-tarjan1975" role="doc-biblioref">Tarjan 1975</a>)</span>.</p>
+<p>Sedgewick and Wayne <span class="citation" data-cites="sedgewick2011">(<a href="#ref-sedgewick2011" role="doc-biblioref">Sedgewick and Wayne 2011</a>)</span> devote a quarter of their book to graphs, with many applications and an outstanding treatment of union-find as an opening case study. Cormen et al. <span class="citation" data-cites="clrs2022">(<a href="#ref-clrs2022" role="doc-biblioref">Cormen et al. 2022</a>)</span> give the correctness proofs omitted here, including those for Dijkstra’s and Kruskal’s algorithms, and the algorithms for graphs with negative weights.</p>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-clrs2022" class="csl-entry" role="listitem">
+Cormen, Thomas H., Charles E. Leiserson, Ronald L. Rivest, and Clifford Stein. 2022. <em>Introduction to Algorithms</em>. 4th ed. MIT Press.
+</div>
+<div id="ref-dijkstra1959" class="csl-entry" role="listitem">
+Dijkstra, Edsger W. 1959. <span>“A Note on Two Problems in Connexion with Graphs.”</span> <em>Numerische Mathematik</em> 1 (1): 269–71.
+</div>
+<div id="ref-galler1964" class="csl-entry" role="listitem">
+Galler, Bernard A., and Michael J. Fischer. 1964. <span>“An Improved Equivalence Algorithm.”</span> <em>Communications of the ACM</em> 7 (5): 301–3.
+</div>
+<div id="ref-hopcroft1973" class="csl-entry" role="listitem">
+Hopcroft, John, and Robert Tarjan. 1973. <span>“Algorithm 447: Efficient Algorithms for Graph Manipulation.”</span> <em>Communications of the ACM</em> 16 (6): 372–78.
+</div>
+<div id="ref-kahn1962" class="csl-entry" role="listitem">
+Kahn, Arthur B. 1962. <span>“Topological Sorting of Large Networks.”</span> <em>Communications of the ACM</em> 5 (11): 558–62.
+</div>
+<div id="ref-kruskal1956" class="csl-entry" role="listitem">
+Kruskal, Joseph B. 1956. <span>“On the Shortest Spanning Subtree of a Graph and the Traveling Salesman Problem.”</span> <em>Proceedings of the American Mathematical Society</em> 7 (1): 48–50.
+</div>
+<div id="ref-sedgewick2011" class="csl-entry" role="listitem">
+Sedgewick, Robert, and Kevin Wayne. 2011. <em>Algorithms</em>. 4th ed. Addison-Wesley.
+</div>
+<div id="ref-tarjan1975" class="csl-entry" role="listitem">
+Tarjan, Robert E. 1975. <span>“Efficiency of a Good but Not Linear Set Union Algorithm.”</span> <em>Journal of the ACM</em> 22 (2): 215–25.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="08-heaps-sorting.html"><span>← Previous</span>Heaps and Sorting</a>
+<a class="next" href="10-wild.html"><span>Next →</span>Data Structures in the Wild</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+<script src="assets/viz/core.js"></script>
+<script src="assets/viz/graph.js"></script>
+<script src="assets/viz/unionfind.js"></script>
+<script>Viz.mountAll();</script>
+</body>
+</html>

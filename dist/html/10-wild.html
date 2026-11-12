@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Structures in the Wild · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-chapter">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Chapter 10: Data Structures in the Wild</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class="current"><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+<ol class="secs">
+<li><a href="#sec:choosing"><span class="n">10.1</span> Choosing</a></li>
+<li><a href="#sec:lru"><span class="n">10.2</span> Combining structures: an LRU cache</a></li>
+<li><a href="#sec:trie"><span class="n">10.3</span> Tries</a></li>
+<li><a href="#sec:case-studies"><span class="n">10.4</span> Four case studies</a></li>
+<li><a href="#sec:what-next"><span class="n">10.5</span> What we left out, and what to keep</a></li>
+<li><a href="#sec:wild-ex">Exercises</a></li>
+<li><a href="#sec:wild-notes">Chapter notes</a></li>
+</ol>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:wild">
+<p class="kicker">
+Chapter 10 · Week 10
+</p>
+<h1>
+Data Structures in the Wild
+</h1>
+</header>
+<aside class="callout goals"><p class="callout-title"><span class="lab">This week</span></p>
+<p>By the end of this week you should be able to:</p>
+<ul>
+<li>choose a data structure for a problem by asking what operations it needs and what each candidate promises and costs;</li>
+<li>combine structures, so that each covers for another’s weakness, as in an LRU cache;</li>
+<li>implement a trie, and explain when it beats a hash table or a search tree;</li>
+<li>recognize the structures of this course inside real systems: a tokenizer, a database, a version-control system, a vector search engine;</li>
+<li>say what you would check before trusting a data structure you did not write.</li>
+</ul>
+</aside>
+<p>Nine weeks ago this book claimed that a data structure is a decision about where things live, together with a set of promises about how you can get at them. You now have a dozen such decisions in hand. This last chapter is about using them: choosing among them, combining them, and recognizing them in the software you depend on every day, including the software that may have helped you study for this course.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 10.1</span></p>
+<p>A music service keeps, for each user, the 100 most recently played songs. Playing a song that is already on the list moves it to the top. Playing a new one adds it at the top and, if the list is full, drops the song at the bottom. Both must be fast. Which <em>single</em> structure from this book supports “is this song on the list, and where?” and “move this entry to the top” and “drop the bottom entry,” all in constant time?</p>
+<details class="answer"><summary>Answer</summary>
+<p>None of them. A hash table finds the song in constant time but has no notion of order, so it cannot say which entry is the oldest. A linked list can move an entry to the front and drop the last one in constant time, <em>given a pointer to the entry</em>, but finding the entry takes a linear scan. A vector is linear for the move. Each structure is good at half of the job. The solution, in <a href="#sec:lru">Section 10.2</a>, is to use two structures at once and have each do the half it is good at.</p>
+</details>
+</aside>
+<section id="sec:choosing" class="level2">
+<h2><span class="secnum">10.1</span> Choosing</h2>
+<p>When you face a problem that needs a container, resist the urge to pick the one you used last. Ask, in order:</p>
+<ol type="1">
+<li><strong>What operations do I need?</strong> Write them down. Lookup by key? By position? Insertion where: at the end, anywhere, in sorted order? Removal? The smallest element? Everything in a range? Iteration in some order?</li>
+<li><strong>Which of them are frequent?</strong> A structure that makes the common operation fast and the rare one slow is usually the right trade.</li>
+<li><strong>How big will it get?</strong> For twenty elements, nothing matters; use a vector. For twenty million, everything matters.</li>
+<li><strong>What guarantees do I need?</strong> Is an average-case bound acceptable, or must every operation be fast? Could an adversary choose the input? Must pointers to elements stay valid while the container changes?</li>
+</ol>
+<p>Then consult the table. It summarizes the whole book.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">If you need…</th>
+<th style="text-align: left;">Reach for</th>
+<th style="text-align: left;">Costs to remember</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">a sequence; access by position; append</td>
+<td style="text-align: left;"><code>std::vector</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> index and amortized append; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> insert in the middle</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">last in, first out</td>
+<td style="text-align: left;"><code>std::stack</code>, or a vector</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">first in, first out</td>
+<td style="text-align: left;"><code>std::queue</code>, or a ring buffer</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">both ends, plus indexing</td>
+<td style="text-align: left;"><code>std::deque</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> at either end</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">lookup by key, order irrelevant</td>
+<td style="text-align: left;"><code>std::unordered_map</code> / <code>_set</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> expected; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> worst</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">lookup by key, <em>and</em> order, ranges, nearest key</td>
+<td style="text-align: left;"><code>std::map</code> / <code>std::set</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math> worst case</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">build once, then look up many times</td>
+<td style="text-align: left;">sorted <code>std::vector</code> + binary search</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math>; smallest and most cache-friendly</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">repeatedly take the smallest (or largest)</td>
+<td style="text-align: left;"><code>std::priority_queue</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math> push and pop</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">membership only, in very little memory, errors tolerable</td>
+<td style="text-align: left;">Bloom filter</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(k)</annotation></semantics></math>; false positives</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">“are these two connected yet?”</td>
+<td style="text-align: left;">union-find</td>
+<td style="text-align: left;">nearly <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">relationships between pairs of things</td>
+<td style="text-align: left;">adjacency lists</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(V + E)</annotation></semantics></math> to traverse</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">splice or remove in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math> given the node; stable addresses</td>
+<td style="text-align: left;"><code>std::list</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> to find anything</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">keys that are strings, with prefix queries</td>
+<td style="text-align: left;">trie</td>
+<td style="text-align: left;">proportional to key length</td>
+</tr>
+</tbody>
+</table>
+<p>Three pieces of advice go with the table.</p>
+<p><strong>Start with a vector.</strong> It is the right answer more often than everything else combined, and when it is the wrong answer, it is usually an adequate one until you have measurements.</p>
+<p><strong>Then a hash table.</strong> Most problems that a vector does not solve are lookup problems, and for those the hash table is the default. Move to a tree when you find you need order.</p>
+<p><strong>Measure before you get clever.</strong> You have seen, repeatedly, that the structure with the better Big-O is not always the faster one, and that the difference between two structures with the same Big-O can be a factor of ten. Intuition about performance is unreliable, yours and everyone else’s. The stopwatch is not.</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>A model is a useful partner for design decisions if you ask it to argue and not to pronounce.</p>
+<blockquote>
+<p>I need a data structure for the following workload: [describe the operations, how often each happens, and the expected size]. Propose two different designs. For each, give the cost of every operation, the memory overhead, and the strongest argument <em>against</em> it. Do not recommend one.</p>
+</blockquote>
+<p>The instruction not to recommend matters. Asked for “the best data structure,” a model tends to give a single confident answer, and you learn nothing about the alternatives. Asked for the trade-offs, it gives you what you need to decide for yourself, and then you measure.</p>
+</aside>
+</section>
+<section id="sec:lru" class="level2">
+<h2><span class="secnum">10.2</span> Combining structures: an LRU cache</h2>
+<p>A <strong>cache</strong> keeps the results of expensive operations (a web page fetched over the network, a block read from disk, a database query) so that a repeated request can be answered from memory. Memory is finite, so a cache has a capacity, and when it is full something must be thrown out to make room. A good and very common policy is to evict the entry that was <strong>least recently used</strong>, on the theory that what has not been needed for the longest time is least likely to be needed soon. This is an <strong>LRU cache</strong>, and it is the music-service problem from the start of the chapter.</p>
+<p>It needs two things done in constant time.</p>
+<ul>
+<li><em>Find an entry by key.</em> That is a job for a hash table.</li>
+<li><em>Keep the entries in order of last use</em>, moving any entry to the front when it is used and removing the one at the back when space is needed. That is a job for a doubly linked list, provided we can get to an entry’s node without searching.</li>
+</ul>
+<p>So use both, and connect them. The list holds the entries, in order of use. The hash table maps each key not to the value but to the entry’s <em>position in the list</em>.</p>
+<figure class="fig" id="fig:lru"><svg class="figsvg" viewBox="0 0 640 210" width="640" height="210" role="img" aria-label="A hash table whose values are positions in a doubly linked list." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-accent-soft" x="70" y="136" width="96" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="114.0" y1="136.0" x2="114.0" y2="170.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="92.0" y="153.0" text-anchor="middle" dominant-baseline="central" font-size="14">B</text>
+<text class="t-ink mono" x="140.0" y="153.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<rect class="s-ink f-accent-soft" x="210" y="136" width="96" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="254.0" y1="136.0" x2="254.0" y2="170.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="232.0" y="153.0" text-anchor="middle" dominant-baseline="central" font-size="14">D</text>
+<text class="t-ink mono" x="280.0" y="153.0" text-anchor="middle" dominant-baseline="central" font-size="14">4</text>
+<rect class="s-ink f-accent-soft" x="350" y="136" width="96" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="394.0" y1="136.0" x2="394.0" y2="170.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="372.0" y="153.0" text-anchor="middle" dominant-baseline="central" font-size="14">A</text>
+<text class="t-ink mono" x="420.0" y="153.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<rect class="s-ink f-accent-soft" x="490" y="136" width="96" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="534.0" y1="136.0" x2="534.0" y2="170.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="512.0" y="153.0" text-anchor="middle" dominant-baseline="central" font-size="14">C</text>
+<text class="t-ink mono" x="560.0" y="153.0" text-anchor="middle" dominant-baseline="central" font-size="14">3</text>
+<line class="s-ink f-none" x1="166.0" y1="147.0" x2="203.0" y2="147.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="209.0,147.0 200.0,143.4 200.0,150.6"/>
+<line class="s-muted f-none" x1="210.0" y1="160.0" x2="173.0" y2="160.0" stroke-width="1.3"/>
+<polygon class="s-none f-muted" points="167.0,160.0 176.0,163.6 176.0,156.4"/>
+<line class="s-ink f-none" x1="306.0" y1="147.0" x2="343.0" y2="147.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="349.0,147.0 340.0,143.4 340.0,150.6"/>
+<line class="s-muted f-none" x1="350.0" y1="160.0" x2="313.0" y2="160.0" stroke-width="1.3"/>
+<polygon class="s-none f-muted" points="307.0,160.0 316.0,163.6 316.0,156.4"/>
+<line class="s-ink f-none" x1="446.0" y1="147.0" x2="483.0" y2="147.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="489.0,147.0 480.0,143.4 480.0,150.6"/>
+<line class="s-muted f-none" x1="490.0" y1="160.0" x2="453.0" y2="160.0" stroke-width="1.3"/>
+<polygon class="s-none f-muted" points="447.0,160.0 456.0,163.6 456.0,156.4"/>
+<text class="t-good" x="118.0" y="186.0" text-anchor="middle" dominant-baseline="central" font-size="11">most recently used</text>
+<text class="t-bad" x="538.0" y="186.0" text-anchor="middle" dominant-baseline="central" font-size="11">least recently used:</text>
+<text class="t-bad" x="538.0" y="200.0" text-anchor="middle" dominant-baseline="central" font-size="11">evicted next</text>
+<text class="t-ink b" x="40.0" y="153.0" text-anchor="end" dominant-baseline="central" font-size="12">list</text>
+<text class="t-ink b" x="206.0" y="40.0" text-anchor="end" dominant-baseline="central" font-size="12">hash table</text>
+<rect class="s-ink f-muted-soft" x="220" y="24" width="50" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="234.0" y="40.0" text-anchor="middle" dominant-baseline="central" font-size="14">A</text>
+<circle class="s-ink f-ink" cx="254" cy="40" r="2.6" stroke-width="1.3"/>
+<line class="s-accent2 f-none" x1="254.0" y1="40.0" x2="393.0" y2="130.7" stroke-width="1.1"/>
+<polygon class="s-none f-accent2" points="398.0,134.0 392.4,126.1 388.5,132.1"/>
+<rect class="s-ink f-muted-soft" x="270" y="24" width="50" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="284.0" y="40.0" text-anchor="middle" dominant-baseline="central" font-size="14">B</text>
+<circle class="s-ink f-ink" cx="304" cy="40" r="2.6" stroke-width="1.3"/>
+<line class="s-accent2 f-none" x1="304.0" y1="40.0" x2="123.4" y2="131.3" stroke-width="1.1"/>
+<polygon class="s-none f-accent2" points="118.0,134.0 127.7,133.2 124.4,126.7"/>
+<rect class="s-ink f-muted-soft" x="320" y="24" width="50" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="334.0" y="40.0" text-anchor="middle" dominant-baseline="central" font-size="14">C</text>
+<circle class="s-ink f-ink" cx="354" cy="40" r="2.6" stroke-width="1.3"/>
+<line class="s-accent2 f-none" x1="354.0" y1="40.0" x2="532.7" y2="131.3" stroke-width="1.1"/>
+<polygon class="s-none f-accent2" points="538.0,134.0 531.6,126.7 528.3,133.1"/>
+<rect class="s-ink f-muted-soft" x="370" y="24" width="50" height="32" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="384.0" y="40.0" text-anchor="middle" dominant-baseline="central" font-size="14">D</text>
+<circle class="s-ink f-ink" cx="404" cy="40" r="2.6" stroke-width="1.3"/>
+<line class="s-accent2 f-none" x1="404.0" y1="40.0" x2="263.0" y2="130.8" stroke-width="1.1"/>
+<polygon class="s-none f-accent2" points="258.0,134.0 267.5,132.2 263.6,126.1"/>
+<text class="t-muted" x="432.0" y="40.0" text-anchor="start" dominant-baseline="central" font-size="11">key  -&gt;  node</text>
+</svg><figcaption>
+<span class="fignum">Figure 10.1</span> An LRU cache of capacity four. The list holds the entries, most recently used first. The hash table maps each key to that key’s node in the list, so an entry can be found in constant time and then moved to the front, or removed, in constant time.
+</figcaption></figure>
+<div class="listing"><div class="listing-file">code/ch10/lru.hpp</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> K<span class="op">,</span> <span class="kw">typename</span> V<span class="op">&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> LruCache <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">using</span> Entry <span class="op">=</span> <span class="bu">std::</span>pair<span class="op">&lt;</span>K<span class="op">,</span> V<span class="op">&gt;;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">using</span> Position <span class="op">=</span> <span class="kw">typename</span> <span class="bu">std::</span>list<span class="op">&lt;</span>Entry<span class="op">&gt;::</span>iterator<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t <span class="va">capacity_</span><span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>list<span class="op">&lt;</span>Entry<span class="op">&gt;</span> <span class="va">order_</span><span class="op">;</span>                 <span class="co">// most recently used at the front</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>unordered_map<span class="op">&lt;</span>K<span class="op">,</span> Position<span class="op">&gt;</span> <span class="va">where_</span><span class="op">;</span>  <span class="co">// key -&gt; its node in order_</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> LruCache<span class="op">(</span><span class="bu">std::</span>size_t capacity<span class="op">)</span> <span class="op">:</span> <span class="va">capacity_</span><span class="op">(</span>capacity<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="ot">assert</span><span class="op">(</span>capacity <span class="op">&gt;</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// A member-by-member copy would leave the copy&#39;s where_ holding</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// iterators into the ORIGINAL&#39;s order_. Forbid copying; moving is</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">// fine, because a moved list keeps its nodes and so its iterators.</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    LruCache<span class="op">(</span><span class="at">const</span> LruCache<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span><span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    LruCache<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="at">const</span> LruCache<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span><span class="op">;</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    LruCache<span class="op">(</span>LruCache<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    LruCache<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>LruCache<span class="op">&amp;&amp;)</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t size<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">order_</span><span class="op">.</span>size<span class="op">();</span> <span class="op">}</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Returns a pointer to key&#39;s value, or nullptr if it is not cached.</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="co">// A successful lookup counts as a use.</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    V<span class="op">*</span> get<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> found <span class="op">=</span> <span class="va">where_</span><span class="op">.</span>find<span class="op">(</span>key<span class="op">);</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>found <span class="op">==</span> <span class="va">where_</span><span class="op">.</span>end<span class="op">())</span> <span class="cf">return</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Move the entry&#39;s node to the front of the list. splice relinks</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>        <span class="co">// the node in O(1); nothing is copied, and the iterator stored</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>        <span class="co">// in where_ remains valid.</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>        <span class="va">order_</span><span class="op">.</span>splice<span class="op">(</span><span class="va">order_</span><span class="op">.</span>begin<span class="op">(),</span> <span class="va">order_</span><span class="op">,</span> found<span class="op">-&gt;</span>second<span class="op">);</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">&amp;</span>found<span class="op">-&gt;</span>second<span class="op">-&gt;</span>second<span class="op">;</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> put<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">,</span> V value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>V<span class="op">*</span> existing <span class="op">=</span> get<span class="op">(</span>key<span class="op">))</span> <span class="op">{</span>        <span class="co">// already cached: update it</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>            <span class="op">*</span>existing <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">);</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="va">order_</span><span class="op">.</span>size<span class="op">()</span> <span class="op">==</span> <span class="va">capacity_</span><span class="op">)</span> <span class="op">{</span>    <span class="co">// full: evict the entry at the back</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>            <span class="va">where_</span><span class="op">.</span>erase<span class="op">(</span><span class="va">order_</span><span class="op">.</span>back<span class="op">().</span>first<span class="op">);</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>            <span class="va">order_</span><span class="op">.</span>pop_back<span class="op">();</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>        <span class="va">order_</span><span class="op">.</span>emplace_front<span class="op">(</span>key<span class="op">,</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">));</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>        <span class="va">where_</span><span class="op">[</span>key<span class="op">]</span> <span class="op">=</span> <span class="va">order_</span><span class="op">.</span>begin<span class="op">();</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch10/wild_test.cpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>LruCache<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">,</span> <span class="dt">int</span><span class="op">&gt;</span> cache<span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>cache<span class="op">.</span>put<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>cache<span class="op">.</span>put<span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>cache<span class="op">.</span>get<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">);</span>            <span class="co">// &quot;a&quot; is now the most recently used</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>cache<span class="op">.</span>put<span class="op">(</span><span class="st">&quot;c&quot;</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span>         <span class="co">// full: evicts &quot;b&quot;, the least recently used</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>cache<span class="op">.</span>get<span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">)</span> <span class="op">==</span> <span class="kw">nullptr</span><span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(*</span>cache<span class="op">.</span>get<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">)</span> <span class="op">==</span> <span class="dv">1</span> <span class="op">&amp;&amp;</span> <span class="op">*</span>cache<span class="op">.</span>get<span class="op">(</span><span class="st">&quot;c&quot;</span><span class="op">)</span> <span class="op">==</span> <span class="dv">3</span><span class="op">);</span></span></code></pre></div>
+</div>
+<p>Every operation is a hash lookup followed by a constant amount of pointer manipulation: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> expected.</p>
+<p>This is, at last, a job that a linked list does better than anything else, and it is worth being precise about why. In <a href="04-links.html#sec:cache">Section 4.5</a> the list lost to the vector because every operation began with a search, and searching a list is slow. Here the hash table does the searching. The list is asked to do only what it is good at: relink a node, given the node. And the design depends on a promise that only a linked structure makes: a list iterator stays valid when <em>other</em> nodes are inserted, removed, or moved. The hash table can hold on to those iterators indefinitely. Positions in a vector would be invalidated by the very first eviction.</p>
+<p>The class is built entirely from standard parts and needs no destructor: its members, a <code>std::list</code> and a <code>std::unordered_map</code>, clean up after themselves. Copying is another matter, and it is a useful warning about the rule of zero. A member-by-member copy would duplicate the list and duplicate the map, but the copied map would hold iterators that still point into the <em>original’s</em> list. Each member knows how to copy itself; neither knows about the other. So the class declares its copy operations deleted, which makes copying a compile-time error instead of a use-after-free waiting to happen. Whenever one member of a class refers into another, the compiler-generated copy is wrong.</p>
+<p>The general lesson is that real problems are often solved by a small <em>system</em> of data structures, each compensating for another’s weakness: a hash table for finding, with a list for order; a heap for priority, with a hash table for locating entries in it; a sorted array for searching, with a small buffer in front for cheap insertions. When no single structure fits your operations, ask whether two would.</p>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>LRU caches are everywhere there is something slow to avoid: in operating systems (which pages of memory to keep), in databases (which disk blocks), in web browsers and content delivery networks (which responses), and in processors themselves. The hash-map-plus-linked-list design shown here is the standard one; Python’s <code>functools.lru_cache</code> and Java’s <code>LinkedHashMap</code> are both built this way.</p>
+</aside>
+</section>
+<section id="sec:trie" class="level2">
+<h2><span class="secnum">10.3</span> Tries</h2>
+<p>Every structure so far has treated a key as an indivisible thing, to be hashed or compared as a whole. When keys are <em>strings</em>, there is another possibility: use the characters of the key, one at a time, to steer through a tree.</p>
+<p>A <strong>trie</strong> (the name comes from re<em>trie</em>val; most people say “try”) is a tree in which each edge is labeled with a character, and each node represents the string spelled out by the path from the root to it <span class="citation" data-cites="fredkin1960">(<a href="#ref-fredkin1960" role="doc-biblioref">Fredkin 1960</a>)</span>. To look up a word, start at the root and follow the edge for its first letter, then the edge for its second, and so on. The word is in the set if the path exists and the node where it ends is marked as the end of a word.</p>
+<figure class="fig viz" id="fig:trie"><div class="viz-widget" data-viz="trie"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 290" width="640" height="290" role="img" aria-label="A trie containing tree, trie, try, trial, heap, hash and he." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="317.9" y1="28.7" x2="222.1" y2="65.3" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="210.0" y1="83.0" x2="210.0" y2="103.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="198.4" y1="121.9" x2="131.6" y2="156.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="120.0" y1="175.0" x2="120.0" y2="195.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="212.8" y1="128.7" x2="217.2" y2="149.3" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="211.5" y1="171.8" x2="188.5" y2="198.2" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="180.0" y1="221.0" x2="180.0" y2="241.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="228.5" y1="171.8" x2="251.5" y2="198.2" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="221.8" y1="121.4" x2="298.2" y2="156.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="342.4" y1="28.1" x2="457.6" y2="65.9" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="460.4" y1="78.8" x2="429.6" y2="107.2" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="420.0" y1="129.0" x2="420.0" y2="149.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="420.0" y1="175.0" x2="420.0" y2="195.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="480.3" y1="77.9" x2="519.7" y2="108.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="530.0" y1="129.0" x2="530.0" y2="149.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="530.0" y1="175.0" x2="530.0" y2="195.0" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="330" cy="24" r="13" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="210" cy="70" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="210.0" y="70.0" text-anchor="middle" dominant-baseline="central" font-size="13">t</text>
+<circle class="s-ink f-paper" cx="210" cy="116" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="210.0" y="116.0" text-anchor="middle" dominant-baseline="central" font-size="13">r</text>
+<circle class="s-ink f-paper" cx="120" cy="162" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="120.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">e</text>
+<circle class="s-accent2 f-accent2-soft" cx="120" cy="208" r="16.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2-soft" cx="120" cy="208" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="120.0" y="208.0" text-anchor="middle" dominant-baseline="central" font-size="13">e</text>
+<circle class="s-ink f-paper" cx="220" cy="162" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="220.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">i</text>
+<circle class="s-ink f-paper" cx="180" cy="208" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="180.0" y="208.0" text-anchor="middle" dominant-baseline="central" font-size="13">a</text>
+<circle class="s-accent2 f-accent2-soft" cx="180" cy="254" r="16.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2-soft" cx="180" cy="254" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="180.0" y="254.0" text-anchor="middle" dominant-baseline="central" font-size="13">l</text>
+<circle class="s-accent2 f-accent2-soft" cx="260" cy="208" r="16.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2-soft" cx="260" cy="208" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="260.0" y="208.0" text-anchor="middle" dominant-baseline="central" font-size="13">e</text>
+<circle class="s-accent2 f-accent2-soft" cx="310" cy="162" r="16.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2-soft" cx="310" cy="162" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="310.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">y</text>
+<circle class="s-ink f-paper" cx="470" cy="70" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="470.0" y="70.0" text-anchor="middle" dominant-baseline="central" font-size="13">h</text>
+<circle class="s-accent2 f-accent2-soft" cx="420" cy="116" r="16.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2-soft" cx="420" cy="116" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="420.0" y="116.0" text-anchor="middle" dominant-baseline="central" font-size="13">e</text>
+<circle class="s-ink f-paper" cx="420" cy="162" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="420.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">a</text>
+<circle class="s-accent2 f-accent2-soft" cx="420" cy="208" r="16.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2-soft" cx="420" cy="208" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="420.0" y="208.0" text-anchor="middle" dominant-baseline="central" font-size="13">p</text>
+<circle class="s-ink f-paper" cx="530" cy="116" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="530.0" y="116.0" text-anchor="middle" dominant-baseline="central" font-size="13">a</text>
+<circle class="s-ink f-paper" cx="530" cy="162" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="530.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">s</text>
+<circle class="s-accent2 f-accent2-soft" cx="530" cy="208" r="16.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2-soft" cx="530" cy="208" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="530.0" y="208.0" text-anchor="middle" dominant-baseline="central" font-size="13">h</text>
+<text class="t-muted" x="330.0" y="6.0" text-anchor="middle" dominant-baseline="central" font-size="10">root</text>
+<text class="t-accent2 i" x="120.0" y="234.0" text-anchor="middle" dominant-baseline="central" font-size="11">tree</text>
+<text class="t-accent2 i" x="180.0" y="280.0" text-anchor="middle" dominant-baseline="central" font-size="11">trial</text>
+<text class="t-accent2 i" x="260.0" y="234.0" text-anchor="middle" dominant-baseline="central" font-size="11">trie</text>
+<text class="t-accent2 i" x="332.0" y="162.0" text-anchor="start" dominant-baseline="central" font-size="11">try</text>
+<text class="t-accent2 i" x="442.0" y="116.0" text-anchor="start" dominant-baseline="central" font-size="11">he</text>
+<text class="t-accent2 i" x="420.0" y="234.0" text-anchor="middle" dominant-baseline="central" font-size="11">heap</text>
+<text class="t-accent2 i" x="530.0" y="234.0" text-anchor="middle" dominant-baseline="central" font-size="11">hash</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 10.2</span> A trie holding seven words. Each path from the root spells a prefix; double-ringed nodes mark the ends of words. Words with a common prefix share the nodes for it, so “tree”, “trie”, “trial”, and “try” share the path t–r. In the web edition, insert words and type a prefix to see its completions.
+</figcaption></figure>
+<div class="listing"><div class="listing-file">code/ch10/trie.hpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> is_word <span class="op">=</span> <span class="kw">false</span><span class="op">;</span>                          <span class="co">// does a word end here?</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>array<span class="op">&lt;</span><span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Node<span class="op">&gt;,</span> <span class="dv">26</span><span class="op">&gt;</span> next<span class="op">;</span>    <span class="co">// one child per letter</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>Node <span class="va">root_</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t <span class="va">words_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="bu">std::</span>size_t slot<span class="op">(</span><span class="dt">char</span> c<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(</span>c <span class="op">&gt;=</span> <span class="ch">&#39;a&#39;</span> <span class="op">&amp;&amp;</span> c <span class="op">&lt;=</span> <span class="ch">&#39;z&#39;</span><span class="op">);</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>c <span class="op">-</span> <span class="ch">&#39;a&#39;</span><span class="op">);</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Each node has an array of 26 child pointers, one per letter, most of them null. A key’s characters are used directly as indices, the direct-addressing idea once more.</p>
+<div class="listing"><div class="listing-file">code/ch10/trie.hpp</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Follow the path spelled by s. Returns the node reached, or nullptr</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="co">// if the path leaves the trie.</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Node<span class="op">*</span> walk<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> s<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Node<span class="op">*</span> n <span class="op">=</span> <span class="op">&amp;</span><span class="va">root_</span><span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">char</span> c <span class="op">:</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        n <span class="op">=</span> n<span class="op">-&gt;</span>next<span class="op">[</span>slot<span class="op">(</span>c<span class="op">)].</span>get<span class="op">();</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> n<span class="op">;</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch10/trie.hpp</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> insert<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> word<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> n <span class="op">=</span> <span class="op">&amp;</span><span class="va">root_</span><span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">char</span> c <span class="op">:</span> word<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Node<span class="op">&gt;&amp;</span> child <span class="op">=</span> n<span class="op">-&gt;</span>next<span class="op">[</span>slot<span class="op">(</span>c<span class="op">)];</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!</span>child<span class="op">)</span> child <span class="op">=</span> <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Node<span class="op">&gt;();</span>   <span class="co">// extend the path</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        n <span class="op">=</span> child<span class="op">.</span>get<span class="op">();</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>n<span class="op">-&gt;</span>is_word<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        n<span class="op">-&gt;</span>is_word <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">++</span><span class="va">words_</span><span class="op">;</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> contains<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> word<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Node<span class="op">*</span> n <span class="op">=</span> walk<span class="op">(</span>word<span class="op">);</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> n <span class="op">!=</span> <span class="kw">nullptr</span> <span class="op">&amp;&amp;</span> n<span class="op">-&gt;</span>is_word<span class="op">;</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> has_prefix<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> prefix<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> walk<span class="op">(</span>prefix<span class="op">)</span> <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a><span class="co">// Up to `limit` words that begin with prefix, in alphabetical order.</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">&gt;</span> complete<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> prefix<span class="op">,</span> <span class="bu">std::</span>size_t limit<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">&gt;</span> out<span class="op">;</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="at">const</span> Node<span class="op">*</span> n <span class="op">=</span> walk<span class="op">(</span>prefix<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>string path <span class="op">=</span> prefix<span class="op">;</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>        collect<span class="op">(</span>n<span class="op">,</span> path<span class="op">,</span> limit<span class="op">,</span> out<span class="op">);</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> out<span class="op">;</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch10/wild_test.cpp</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>Trie t<span class="op">;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="at">const</span> <span class="dt">char</span><span class="op">*</span> w <span class="op">:</span> <span class="op">{</span><span class="st">&quot;tree&quot;</span><span class="op">,</span> <span class="st">&quot;trie&quot;</span><span class="op">,</span> <span class="st">&quot;try&quot;</span><span class="op">,</span> <span class="st">&quot;trial&quot;</span><span class="op">,</span> <span class="st">&quot;heap&quot;</span><span class="op">,</span> <span class="st">&quot;hash&quot;</span><span class="op">,</span> <span class="st">&quot;he&quot;</span><span class="op">})</span> <span class="op">{</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    t<span class="op">.</span>insert<span class="op">(</span>w<span class="op">);</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>t<span class="op">.</span>contains<span class="op">(</span><span class="st">&quot;trie&quot;</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="op">!</span>t<span class="op">.</span>contains<span class="op">(</span><span class="st">&quot;tri&quot;</span><span class="op">));</span>   <span class="co">// &quot;tri&quot; is only a prefix</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>t<span class="op">.</span>has_prefix<span class="op">(</span><span class="st">&quot;tri&quot;</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="op">!</span>t<span class="op">.</span>has_prefix<span class="op">(</span><span class="st">&quot;tra&quot;</span><span class="op">));</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">((</span>t<span class="op">.</span>complete<span class="op">(</span><span class="st">&quot;tr&quot;</span><span class="op">,</span> <span class="dv">10</span><span class="op">)</span> <span class="op">==</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">&gt;{</span><span class="st">&quot;tree&quot;</span><span class="op">,</span> <span class="st">&quot;trial&quot;</span><span class="op">,</span> <span class="st">&quot;trie&quot;</span><span class="op">,</span> <span class="st">&quot;try&quot;</span><span class="op">}));</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">((</span>t<span class="op">.</span>complete<span class="op">(</span><span class="st">&quot;he&quot;</span><span class="op">,</span> <span class="dv">10</span><span class="op">)</span> <span class="op">==</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">&gt;{</span><span class="st">&quot;he&quot;</span><span class="op">,</span> <span class="st">&quot;heap&quot;</span><span class="op">}));</span></span></code></pre></div>
+</div>
+<p>Two properties set tries apart.</p>
+<p><strong>The cost depends on the length of the key, not on the number of keys.</strong> Looking up a word of length <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>L</mi><annotation encoding="application/x-tex">L</annotation></semantics></math> takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>L</mi><annotation encoding="application/x-tex">L</annotation></semantics></math> steps whether the trie holds ten words or ten million. A hash table also takes time proportional to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>L</mi><annotation encoding="application/x-tex">L</annotation></semantics></math>, to compute the hash; a balanced tree takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>L</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(L \log n)</annotation></semantics></math>, since each of its <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">\log n</annotation></semantics></math> comparisons may examine up to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>L</mi><annotation encoding="application/x-tex">L</annotation></semantics></math> characters.</p>
+<p><strong>Prefixes are first-class.</strong> All the words that begin with a given prefix live in the subtree below that prefix’s node. To list them, walk to the node and traverse its subtree. That is <code>complete</code> above, and it is how autocompletion works. A hash table cannot do this at all, since hashing scatters words that share a prefix.</p>
+<p>The price is memory. Our node holds 26 pointers, 208 bytes, and a trie can have a node for every character of every key. Practical tries economize in various ways: by storing children in a small sorted array or a hash map, or by collapsing chains of single-child nodes into one node labeled with a whole substring, which gives a <em>radix tree</em>.</p>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>Network routers find the destination of every packet with a trie over the bits of its address, looking for the longest matching prefix. The Linux kernel uses radix trees to index cached file contents. And tries are central to how text is fed to language models, which is the first of our case studies.</p>
+</aside>
+</section>
+<section id="sec:case-studies" class="level2">
+<h2><span class="secnum">10.4</span> Four case studies</h2>
+<p>The rest of this chapter looks inside four real systems. Nothing in them is beyond you now. Each is assembled from structures you have built, and in each the interesting part is how the pieces are chosen and combined.</p>
+<section id="sec:tokenizers" class="level3 unnumbered">
+<h3 class="unnumbered">How a language model reads: tokenizers</h3>
+<p>A language model does not see characters, and it does not see words. It sees <strong>tokens</strong>: integers that index into a fixed vocabulary of tens of thousands to a few hundred thousand text fragments. Before any text reaches the model, a <em>tokenizer</em> chops it into fragments from the vocabulary. Common words are single tokens; rarer ones are split into pieces, so that <code>unbelievably</code> might become <code>un</code>, <code>believ</code>, <code>ably</code>.</p>
+<p>Where does the vocabulary come from? Most current models use a method called <strong>byte-pair encoding</strong>, which began life as a data-compression algorithm <span class="citation" data-cites="gage1994">(<a href="#ref-gage1994" role="doc-biblioref">Gage 1994</a>)</span> and was adapted for language models in 2016 <span class="citation" data-cites="sennrich2016">(<a href="#ref-sennrich2016" role="doc-biblioref">Sennrich, Haddow, and Birch 2016</a>)</span>. It is learned from a large body of text by a strikingly simple loop.</p>
+<ol type="1">
+<li>Start with every word split into single characters. The vocabulary is the set of characters.</li>
+<li>Count how often each <em>pair of adjacent tokens</em> occurs in the whole corpus.</li>
+<li>Take the most frequent pair, and merge it into a single new token everywhere it occurs. Add that token to the vocabulary.</li>
+<li>Repeat from step 2, tens of thousands of times.</li>
+</ol>
+<div class="listing"><div class="listing-file">code/ch10/bpe.cpp</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">using</span> Word <span class="op">=</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">&gt;;</span>   <span class="co">// a word as a sequence of tokens</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Count every adjacent pair of tokens across the corpus.</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>map<span class="op">&lt;</span><span class="bu">std::</span>pair<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">,</span> <span class="bu">std::</span>string<span class="op">&gt;,</span> <span class="dt">int</span><span class="op">&gt;</span> count_pairs<span class="op">(</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>pair<span class="op">&lt;</span>Word<span class="op">,</span> <span class="dt">int</span><span class="op">&gt;&gt;&amp;</span> corpus<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>map<span class="op">&lt;</span><span class="bu">std::</span>pair<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">,</span> <span class="bu">std::</span>string<span class="op">&gt;,</span> <span class="dt">int</span><span class="op">&gt;</span> counts<span class="op">;</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> <span class="kw">auto</span><span class="op">&amp;</span> <span class="op">[</span>word<span class="op">,</span> freq<span class="op">]</span> <span class="op">:</span> corpus<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">+</span> <span class="dv">1</span> <span class="op">&lt;</span> word<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>            counts<span class="op">[{</span>word<span class="op">[</span>i<span class="op">],</span> word<span class="op">[</span>i <span class="op">+</span> <span class="dv">1</span><span class="op">]}]</span> <span class="op">+=</span> freq<span class="op">;</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> counts<span class="op">;</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="co">// Replace every occurrence of the pair (a, b) by the single token a+b.</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> merge_pair<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>pair<span class="op">&lt;</span>Word<span class="op">,</span> <span class="dt">int</span><span class="op">&gt;&gt;&amp;</span> corpus<span class="op">,</span> <span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> a<span class="op">,</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>                <span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span><span class="op">&amp;</span> <span class="op">[</span>word<span class="op">,</span> freq<span class="op">]</span> <span class="op">:</span> corpus<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>        Word merged<span class="op">;</span></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> word<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>i <span class="op">+</span> <span class="dv">1</span> <span class="op">&lt;</span> word<span class="op">.</span>size<span class="op">()</span> <span class="op">&amp;&amp;</span> word<span class="op">[</span>i<span class="op">]</span> <span class="op">==</span> a <span class="op">&amp;&amp;</span> word<span class="op">[</span>i <span class="op">+</span> <span class="dv">1</span><span class="op">]</span> <span class="op">==</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>                merged<span class="op">.</span>push_back<span class="op">(</span>a <span class="op">+</span> b<span class="op">);</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>                <span class="op">++</span>i<span class="op">;</span>   <span class="co">// skip the second half of the pair</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>                merged<span class="op">.</span>push_back<span class="op">(</span>word<span class="op">[</span>i<span class="op">]);</span></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>        word <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>merged<span class="op">);</span></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Here is the program run on a toy corpus of four words: “low” (occurring 5 times), “lower” (2), “newest” (6), and “widest” (3), with <code>_</code> marking the end of each word.</p>
+<pre class="console"><code>merge 1: e + s -&gt; es   (seen 9 times)
+merge 2: es + t -&gt; est   (seen 9 times)
+merge 3: est + _ -&gt; est_   (seen 9 times)
+merge 4: l + o -&gt; lo   (seen 7 times)
+merge 5: lo + w -&gt; low   (seen 7 times)
+merge 6: e + w -&gt; ew   (seen 6 times)
+merge 7: ew + est_ -&gt; ewest_   (seen 6 times)
+merge 8: n + ewest_ -&gt; newest_   (seen 6 times)
+
+the corpus, tokenized:
+low _   x5
+low e r _   x2
+newest_   x6
+w i d est_   x3</code></pre>
+<p>Without being told anything about English, the procedure has discovered that <code>est</code> at the end of a word is a unit, and that <code>low</code> is one too. Run for fifty thousand merges on billions of words, it produces a vocabulary of common words, word stems, prefixes, and suffixes.</p>
+<p>Now look at it as a data structures problem. The pair counts live in a map from pairs to integers: a hash table, in a real implementation. Finding the most frequent pair, over and over, is the job of a priority queue. Our toy version recounts everything after each merge, which is hopelessly slow at scale; production tokenizer trainers update the counts incrementally and keep the pairs in a heap. When a trained byte-pair tokenizer is <em>used</em>, it replays its merges on the new text in the order they were learned, which again means looking up pairs in a hash table by their rank. Other families of tokenizer work differently, repeatedly taking the longest vocabulary entry that matches the text at the current position; that is prefix matching, and it is commonly done with a trie. A hash table, a heap, and a trie: three chapters of this book, running every time you send a message to a model.</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Here is an experiment in the limits of introspection. Ask a model:</p>
+<blockquote>
+<p>How exactly would your tokenizer split the word “antidisestablishmentarianism”? List the tokens.</p>
+</blockquote>
+<p>Then check the answer with an actual tokenizer or token-counting tool; several model providers publish one. The model’s answer is often wrong. A model never sees its own tokenization. It receives a sequence of token numbers and has no direct access to the fragments of text they stand for, so its description of how a word is split is a guess from general knowledge, not an observation. It is a neat illustration of a general rule: a model’s account of its own inner workings is a generated text like any other, and deserves the same checking.</p>
+</aside>
+</section>
+<section id="sec:databases" class="level3 unnumbered">
+<h3 class="unnumbered">How a database finds a row: B+ trees and LSM trees</h3>
+<p>A database table may hold billions of rows on disk, and a query such as “find the customer with this ID” must not read them all. The table has an <strong>index</strong>: a data structure, also on disk, that maps keys to the locations of rows. For half a century the standard index has been a variant of the B-tree of <a href="07-balance.html#sec:btree">Section 7.4</a>.</p>
+<p>In a <strong>B+ tree</strong>, the interior nodes hold only keys and child pointers, and all the actual entries live in the leaves. That makes the interior nodes as small as possible, so that each holds as many keys as possible and the tree is as shallow as possible. A node is one disk page; with several hundred keys per node, four levels reach billions of rows. The leaves are also linked to their neighbors in a chain, like a linked list, so that a range query, “every order placed in March,” finds the first matching leaf by descending the tree and then simply walks along the leaves. The upper levels of the tree are small enough to stay in memory, in an LRU cache of pages. A lookup therefore typically costs a single disk read.</p>
+<p>B-trees are superb for reading. Writing is harder on them: inserting rows in random key order modifies pages all over the disk. Many modern storage engines, built for workloads with heavy writing, use a different design called a <strong>log-structured merge tree</strong>, or LSM tree <span class="citation" data-cites="oneil1996">(<a href="#ref-oneil1996" role="doc-biblioref">O’Neil et al. 1996</a>)</span>. Its parts will all be familiar.</p>
+<ul>
+<li>New entries go into a sorted structure <em>in memory</em>, usually a skip list or a balanced tree. Writing is fast because the only disk activity is appending a record to the end of a log file, kept so that nothing is lost in a crash.</li>
+<li>When the in-memory structure grows large, it is written to disk in one sequential pass as an immutable <strong>sorted file</strong>.</li>
+<li>To look up a key, check the in-memory structure, then the sorted files from newest to oldest, using binary search within each. To avoid reading files that cannot contain the key, each file has a <strong>Bloom filter</strong> (<a href="05-hashing.html#sec:bloom">Section 5.5</a>) in memory. Most files are ruled out without a disk read.</li>
+<li>In the background, sorted files are combined into larger sorted files, discarding overwritten entries, by exactly the <strong>merge</strong> step of mergesort (<a href="08-heaps-sorting.html#sec:sorting">Section 8.2</a>).</li>
+</ul>
+<p>A balanced tree, sorted arrays, binary search, Bloom filters, and merging: an LSM tree is practically a review session for this course, and it is what sits beneath many of the largest data stores in the world <span class="citation" data-cites="kleppmann2017">(<a href="#ref-kleppmann2017" role="doc-biblioref">Kleppmann 2017</a>)</span>.</p>
+</section>
+<section id="sec:git" class="level3 unnumbered">
+<h3 class="unnumbered">How Git remembers: hashing and a graph</h3>
+<p>Git, the version-control system, stores the entire history of a project, every version of every file, and does so compactly, with a design of real elegance built from two ideas in this book <span class="citation" data-cites="chacon2014">(<a href="#ref-chacon2014" role="doc-biblioref">Chacon and Straub 2014</a>)</span>.</p>
+<p>The first is hashing, used in a new way. Git stores everything as <em>objects</em>, and the name of an object is <strong>a hash of its contents</strong>. The contents of a file are stored as an object called a <em>blob</em>, under a name computed by a cryptographic hash function from the bytes of the file. This is called <strong>content addressing</strong>, and it has an immediate consequence: two files with identical contents have the same name, and so are stored only once, no matter how many directories or versions they appear in.</p>
+<p>A directory is stored as a <em>tree</em> object: a list of names, each with the hash of the blob or subtree it refers to. A <em>commit</em> object holds the hash of the tree for the project’s top-level directory at that moment, plus the hash of the previous commit, its parent.</p>
+<figure class="fig" id="fig:git"><svg class="figsvg" viewBox="0 0 640 236" width="640" height="236" role="img" aria-label="Two commits whose trees share an unchanged blob." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-muted-soft" x="86.0" y="15.0" width="128" height="30" rx="5" stroke-width="1.3"/>
+<text class="t-ink mono" x="150.0" y="30.0" text-anchor="middle" dominant-baseline="central" font-size="12">commit 1</text>
+<rect class="s-ink f-muted-soft" x="416.0" y="15.0" width="128" height="30" rx="5" stroke-width="1.3"/>
+<text class="t-ink mono" x="480.0" y="30.0" text-anchor="middle" dominant-baseline="central" font-size="12">commit 2</text>
+<rect class="s-ink f-accent-soft" x="86.0" y="85.0" width="128" height="30" rx="5" stroke-width="1.3"/>
+<text class="t-ink mono" x="150.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="12">tree</text>
+<rect class="s-ink f-accent-soft" x="416.0" y="85.0" width="128" height="30" rx="5" stroke-width="1.3"/>
+<text class="t-ink mono" x="480.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="12">tree</text>
+<rect class="s-ink f-paper" x="20.0" y="175.0" width="120" height="30" rx="5" stroke-width="1.3"/>
+<text class="t-ink mono" x="80.0" y="190.0" text-anchor="middle" dominant-baseline="central" font-size="12">blob (old)</text>
+<rect class="s-good f-good-soft" x="260.0" y="175.0" width="110" height="30" rx="5" stroke-width="1.3"/>
+<text class="t-ink mono" x="315.0" y="190.0" text-anchor="middle" dominant-baseline="central" font-size="12">blob</text>
+<rect class="s-accent2 f-accent2-soft" x="500.0" y="175.0" width="120" height="30" rx="5" stroke-width="1.3"/>
+<text class="t-ink mono" x="560.0" y="190.0" text-anchor="middle" dominant-baseline="central" font-size="12">blob (new)</text>
+<line class="s-ink f-none" x1="416.0" y1="30.0" x2="222.0" y2="30.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="216.0,30.0 225.0,33.6 225.0,26.4"/>
+<text class="t-muted" x="315.0" y="18.0" text-anchor="middle" dominant-baseline="central" font-size="11">parent</text>
+<line class="s-ink f-none" x1="150.0" y1="45.0" x2="150.0" y2="78.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="150.0,84.0 153.6,75.0 146.4,75.0"/>
+<line class="s-ink f-none" x1="480.0" y1="45.0" x2="480.0" y2="78.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="480.0,84.0 483.6,75.0 476.4,75.0"/>
+<line class="s-ink f-none" x1="120.0" y1="115.0" x2="83.4" y2="169.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="80.0,174.0 88.0,168.6 82.1,164.5"/>
+<line class="s-ink f-none" x1="180.0" y1="115.0" x2="289.7" y2="171.3" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="295.0,174.0 288.6,166.7 285.3,173.1"/>
+<line class="s-ink f-none" x1="450.0" y1="115.0" x2="340.3" y2="171.3" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="335.0,174.0 344.7,173.1 341.4,166.7"/>
+<line class="s-ink f-none" x1="510.0" y1="115.0" x2="556.1" y2="169.4" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="560.0,174.0 556.9,164.8 551.4,169.5"/>
+<text class="t-muted mono" x="84.0" y="140.0" text-anchor="middle" dominant-baseline="central" font-size="11">main.cpp</text>
+<text class="t-muted mono" x="262.0" y="140.0" text-anchor="middle" dominant-baseline="central" font-size="11">README</text>
+<text class="t-muted mono" x="376.0" y="140.0" text-anchor="middle" dominant-baseline="central" font-size="11">README</text>
+<text class="t-muted mono" x="552.0" y="140.0" text-anchor="middle" dominant-baseline="central" font-size="11">main.cpp</text>
+<text class="t-good" x="315.0" y="218.0" text-anchor="middle" dominant-baseline="central" font-size="11">unchanged content: one object, shared</text>
+</svg><figcaption>
+<span class="fignum">Figure 10.3</span> Two commits in a Git repository. Each commit points to a tree (a directory), which points to blobs (file contents) by their hashes. The second commit changed only <code>main.cpp</code>; its tree points to a new blob for that file and to the <em>same</em> blob as before for <code>README</code>, which is stored once.
+</figcaption></figure>
+<p>Because every object refers to others by the hash of their contents, a change to one file changes that file’s hash, which changes the contents, and so the hash, of the directory that lists it, and so on up to the root. Two versions of a project that differ in one file share every object except those on the path from that file to the top. And two directory trees can be compared quickly: if their hashes are equal, they are identical throughout, and there is no need to look inside. A tree whose nodes are identified by hashes of their contents in this way is called a <strong>Merkle tree</strong> <span class="citation" data-cites="merkle1988">(<a href="#ref-merkle1988" role="doc-biblioref">Merkle 1988</a>)</span>.</p>
+<p>The second idea is the graph. Each commit points to its parent, and a merge commit has two parents. The history of a project is therefore a directed acyclic graph of commits. A branch is nothing more than a named pointer to one commit. Finding the common ancestor of two branches, listing the history of a file, deciding what must be sent to another machine: all of these are graph traversals of the kind in <a href="09-graphs.html">Chapter 9</a>, over a DAG whose edges are hashes.</p>
+</section>
+<section id="sec:vector-search" class="level3 unnumbered">
+<h3 class="unnumbered">How a model looks things up: vector search</h3>
+<p>Language models are often connected to a store of documents, so that a question can be answered from relevant text and not from the model’s memory alone. Finding the relevant text is a search problem of a new kind. Each passage is converted, by a model, into an <strong>embedding</strong>: a list of perhaps a thousand numbers, a point in a space of a thousand dimensions, arranged so that passages with similar meanings are nearby points. A question is converted the same way, and the task is then: among millions or billions of stored points, find the ones <strong>nearest</strong> to the query point.</p>
+<p>None of our structures does this. A hash table finds exact matches; “nearby” is meaningless to it. A search tree needs a one-dimensional order, and a thousand-dimensional space has none that helps. The straightforward method is to compute the distance from the query to every stored point: a linear scan. With the embeddings stored contiguously, that is a cache-friendly sweep and is perfectly good for a few hundred thousand points. For a billion it is far too slow.</p>
+<p>The most widely used solution takes two ideas from this book and a third from <a href="05-hashing.html#sec:bloom">Section 5.5</a>.</p>
+<figure class="fig" id="fig:hnsw"><svg class="figsvg" viewBox="0 0 640 250" width="640" height="250" role="img" aria-label="Three layers of a proximity graph, with a search path descending through them." xmlns="http://www.w3.org/2000/svg">
+<text class="t-muted" x="604.0" y="36.0" text-anchor="start" dominant-baseline="central" font-size="11">layer 2</text>
+<line class="s-muted f-none" x1="24.0" y1="40.0" x2="239.0" y2="43.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="239.0" y1="43.0" x2="497.0" y2="36.5" stroke-width="1"/>
+<text class="t-muted" x="604.0" y="112.0" text-anchor="start" dominant-baseline="central" font-size="11">layer 1</text>
+<line class="s-muted f-none" x1="24.0" y1="116.0" x2="153.0" y2="118.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="153.0" y1="118.0" x2="239.0" y2="119.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="239.0" y1="119.0" x2="368.0" y2="119.5" stroke-width="1"/>
+<line class="s-muted f-none" x1="368.0" y1="119.5" x2="497.0" y2="112.5" stroke-width="1"/>
+<line class="s-muted f-none" x1="497.0" y1="112.5" x2="583.0" y2="116.0" stroke-width="1"/>
+<text class="t-muted" x="604.0" y="192.0" text-anchor="start" dominant-baseline="central" font-size="11">layer 0</text>
+<line class="s-muted f-none" x1="24.0" y1="196.0" x2="67.0" y2="204.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="67.0" y1="204.0" x2="110.0" y2="190.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="110.0" y1="190.0" x2="153.0" y2="200.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="153.0" y1="200.0" x2="196.0" y2="188.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="196.0" y1="188.0" x2="239.0" y2="202.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="239.0" y1="202.0" x2="282.0" y2="196.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="282.0" y1="196.0" x2="325.0" y2="191.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="325.0" y1="191.0" x2="368.0" y2="203.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="368.0" y1="203.0" x2="411.0" y2="193.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="411.0" y1="193.0" x2="454.0" y2="201.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="454.0" y1="201.0" x2="497.0" y2="189.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="497.0" y1="189.0" x2="540.0" y2="199.0" stroke-width="1"/>
+<line class="s-muted f-none" x1="540.0" y1="199.0" x2="583.0" y2="196.0" stroke-width="1"/>
+<path class="s-muted f-none" d="M24.0,196.0 Q67.0,222.0 110.0,190.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M67.0,204.0 Q110.0,222.0 153.0,200.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M110.0,190.0 Q153.0,222.0 196.0,188.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M153.0,200.0 Q196.0,222.0 239.0,202.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M196.0,188.0 Q239.0,222.0 282.0,196.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M239.0,202.0 Q282.0,222.0 325.0,191.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M282.0,196.0 Q325.0,222.0 368.0,203.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M325.0,191.0 Q368.0,222.0 411.0,193.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M368.0,203.0 Q411.0,222.0 454.0,201.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M411.0,193.0 Q454.0,222.0 497.0,189.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M454.0,201.0 Q497.0,222.0 540.0,199.0" stroke-width="0.7"/>
+<path class="s-muted f-none" d="M497.0,189.0 Q540.0,222.0 583.0,196.0" stroke-width="0.7"/>
+<line class="s-muted f-none dash" x1="24.0" y1="116.0" x2="24.0" y2="196.0" stroke-width="0.8"/>
+<line class="s-muted f-none dash" x1="153.0" y1="118.0" x2="153.0" y2="200.0" stroke-width="0.8"/>
+<line class="s-muted f-none dash" x1="239.0" y1="119.0" x2="239.0" y2="202.0" stroke-width="0.8"/>
+<line class="s-muted f-none dash" x1="368.0" y1="119.5" x2="368.0" y2="203.0" stroke-width="0.8"/>
+<line class="s-muted f-none dash" x1="497.0" y1="112.5" x2="497.0" y2="189.0" stroke-width="0.8"/>
+<line class="s-muted f-none dash" x1="583.0" y1="116.0" x2="583.0" y2="196.0" stroke-width="0.8"/>
+<line class="s-muted f-none dash" x1="24.0" y1="40.0" x2="24.0" y2="116.0" stroke-width="0.8"/>
+<line class="s-muted f-none dash" x1="239.0" y1="43.0" x2="239.0" y2="119.0" stroke-width="0.8"/>
+<line class="s-muted f-none dash" x1="497.0" y1="36.5" x2="497.0" y2="112.5" stroke-width="0.8"/>
+<line class="s-accent2 f-none" x1="30.0" y1="40.1" x2="227.0" y2="42.8" stroke-width="2.4"/>
+<polygon class="s-none f-accent2" points="233.0,42.9 224.1,39.2 224.0,46.4"/>
+<line class="s-accent2 f-none" x1="245.0" y1="42.8" x2="485.0" y2="36.8" stroke-width="2.4"/>
+<polygon class="s-none f-accent2" points="491.0,36.7 481.9,33.3 482.1,40.5"/>
+<line class="s-accent2 f-none" x1="491.0" y1="112.8" x2="380.0" y2="118.8" stroke-width="2.4"/>
+<polygon class="s-none f-accent2" points="374.0,119.2 383.2,122.3 382.8,115.1"/>
+<line class="s-accent2 f-none" x1="373.8" y1="201.6" x2="399.3" y2="195.7" stroke-width="2.4"/>
+<polygon class="s-none f-accent2" points="405.2,194.4 395.6,192.9 397.2,199.9"/>
+<line class="s-accent2 f-none" x1="497.0" y1="42.5" x2="497.0" y2="100.5" stroke-width="2.4"/>
+<polygon class="s-none f-accent2" points="497.0,106.5 500.6,97.5 493.4,97.5"/>
+<line class="s-accent2 f-none" x1="368.0" y1="125.5" x2="368.0" y2="191.0" stroke-width="2.4"/>
+<polygon class="s-none f-accent2" points="368.0,197.0 371.6,188.0 364.4,188.0"/>
+<circle class="s-accent2 f-accent2" cx="24" cy="40.0" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2" cx="239" cy="43.0" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2" cx="497" cy="36.5" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="24" cy="116.0" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="153" cy="118.0" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="239" cy="119.0" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2" cx="368" cy="119.5" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2" cx="497" cy="112.5" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="583" cy="116.0" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="24" cy="196" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="67" cy="204" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="110" cy="190" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="153" cy="200" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="196" cy="188" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="239" cy="202" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="282" cy="196" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="325" cy="191" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2" cx="368" cy="203" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2" cx="411" cy="193" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="454" cy="201" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="497" cy="189" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="540" cy="199" r="5.5" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="583" cy="196" r="5.5" stroke-width="1.3"/>
+<text class="t-bad b" x="423.0" y="232.0" text-anchor="middle" dominant-baseline="central" font-size="18">×</text>
+<text class="t-bad" x="435.0" y="234.0" text-anchor="start" dominant-baseline="central" font-size="11">query</text>
+<text class="t-accent2 b" x="36.0" y="24.0" text-anchor="start" dominant-baseline="central" font-size="11">start</text>
+</svg><figcaption>
+<span class="fignum">Figure 10.4</span> The idea behind a layered proximity graph. Every point appears in the bottom layer, linked to some of its near neighbors. A random subset also appears in each layer above, with longer links. A search starts at the top, hops greedily toward the query, drops down a layer whenever it can get no closer, and finishes with a careful search of the dense bottom layer.
+</figcaption></figure>
+<p>The first idea is a <strong>graph</strong>. Make every stored point a vertex, and connect each to a handful of its nearest neighbors. To search, start at some vertex and repeatedly move to whichever neighbor is closest to the query, until no neighbor is closer: a greedy walk through the graph, examining only a few vertices at each step.</p>
+<p>The second is the layering of a <strong>skip list</strong> (<a href="07-balance.html#sec:family">Section 7.3</a>). A walk through a graph of only short links would take many steps. So a random subset of the points is also placed in a sparser graph “above,” with longer links, and a subset of those in a still sparser graph above that. The search begins in the top layer, takes a few long strides toward the right region, and descends layer by layer to the dense bottom layer for the final approach. The lower layers are explored with a best-first search driven by a <strong>priority queue</strong> of candidates. The structure is called a <em>hierarchical navigable small-world</em> graph, or HNSW <span class="citation" data-cites="malkov2020">(<a href="#ref-malkov2020" role="doc-biblioref">Malkov and Yashunin 2020</a>)</span>.</p>
+<p>The third idea is the Bloom filter’s: <strong>relax the promise</strong>. An HNSW search does not guarantee to find the true nearest neighbors. It finds points that are <em>very probably</em> among the nearest, and it examines a tiny fraction of the data to do so. As with the Bloom filter, the trade is stated explicitly (a measured <em>recall</em>, such as 95 percent, at a given speed), and for this application an approximate answer is entirely acceptable.</p>
+<p>A graph, a skip list’s layers, a priority queue, and an approximate promise. The structure was published in 2016. People are still inventing data structures, and they are inventing them out of the parts in this book.</p>
+</section>
+</section>
+<section id="sec:what-next" class="level2">
+<h2><span class="secnum">10.5</span> What we left out, and what to keep</h2>
+<p>Ten weeks is not long, and this book made choices. Here, briefly, is some of what lies beyond it, so that you will recognize the names.</p>
+<p><strong>Persistent data structures</strong> never modify anything; every “update” produces a new version that shares most of its memory with the old one, as Git’s trees do. They are the foundation of functional programming and make it trivial to keep old versions around <span class="citation" data-cites="okasaki1998">(<a href="#ref-okasaki1998" role="doc-biblioref">Okasaki 1998</a>)</span>.</p>
+<p><strong>Concurrent data structures</strong> can be used safely by many threads at once. Some use locks; the most intricate, called <em>lock-free</em>, use none. This is where linked structures regain ground against arrays, and it is a deep subject.</p>
+<p><strong>Probabilistic sketches</strong> follow the Bloom filter in trading exactness for space. One counts the number of distinct items in a stream of billions using a few kilobytes; another estimates how often each item occurred.</p>
+<p><strong>Spatial structures</strong>, such as k-d trees and R-trees, index points and shapes in two or three dimensions, for maps and graphics. <strong>String structures</strong>, such as suffix arrays, index every position of a long text at once, for search and for genomics.</p>
+<p>And beyond data structures lies the study of <strong>algorithms</strong> proper: systematic techniques for designing them (greedy methods, dynamic programming), proofs of their correctness, and the theory of which problems can be solved efficiently at all. That is your next course.</p>
+<section id="sec:last-word" class="level3 unnumbered">
+<h3 class="unnumbered">The four questions, once more</h3>
+<p>The particular structures in this book will be joined by others over your career, and some will fade. What is meant to last is the habit of asking four questions of every one.</p>
+<p><strong>Where does it live?</strong> Contiguous or linked, one block or many, who owns it. You have seen this question decide performance again and again, in ways that no operation count predicted: the vector against the list, probing against chaining, the B-tree against the binary tree, the heap that needed no pointers.</p>
+<p><strong>What does it promise?</strong> The invariant. Sorted order, heap order, balance, “every key is where its hash says.” An invariant is what turns bytes into a data structure, and stating it precisely is most of the work of implementing it. You have also seen structures gain a great deal by promising <em>less</em>: a heap that does not sort, a Bloom filter that may err, a search that is only probably right.</p>
+<p><strong>What does it cost?</strong> Worst case, average case, amortized. In steps, and then on a real machine. And always: on <em>which</em> inputs? The plain search tree, the naive quicksort, and the unprotected hash table all taught the same lesson, that the dangerous input is not random but patterned, or hostile.</p>
+<p><strong>How do you know?</strong> An invariant you can execute. A differential test against something trusted, on thousands of small random cases. A sanitizer under all of it. A deliberate worst-case input. A stopwatch and a doubling experiment. A mutation to check that the tests can fail.</p>
+<p>That last question is the one this book has pressed hardest, for a reason given in its first pages. You are entering a profession in which code is abundant. A model will write you a red-black tree, a lock-free queue, or an LSM tree on request, in seconds, and most of the time it will be right. What is scarce, and what you are now equipped to supply, is the judgment to choose the right structure, the precision to say what it must guarantee, and the skill to find out whether the thing in front of you actually does.</p>
+<aside class="callout byhand"><p class="callout-title"><span class="lab">By hand first</span></p>
+<p>Here is a checklist to keep. Before you rely on a data structure that you did not write yourself, whether it came from a model, a colleague, or the internet:</p>
+<ol type="1">
+<li><strong>State its invariant</strong> in a sentence. If you cannot, you do not yet know what it is supposed to do.</li>
+<li><strong>Get a checker.</strong> Write a function that verifies the invariant, including any property (balance, load factor) that a performance guarantee rests on, or have one written and read it carefully.</li>
+<li><strong>Test it differentially</strong> against a standard container on random operations, with small sizes and a small key range, checking the invariant as you go.</li>
+<li><strong>Run it under the sanitizers.</strong></li>
+<li><strong>Feed it the awkward inputs:</strong> empty, one element, all equal, already sorted, reverse sorted, and whatever its particular weakness would be.</li>
+<li><strong>Measure its growth</strong> with a doubling experiment, and compare with what was promised.</li>
+<li><strong>Read it.</strong> You can, now.</li>
+</ol>
+<p>None of the seven steps requires you to have written the code. All of them require you to understand it. That is what this course was for.</p>
+</aside>
+</section>
+</section>
+<section id="sec:wild-ex" class="level2 unnumbered">
+<h2 class="unnumbered">Exercises</h2>
+<ol type="1">
+<li><p>For each workload, choose a structure (or combination) and justify the choice by the costs of the operations involved. (a) A spell checker’s dictionary: loaded once, then queried millions of times. (b) The “undo” history of a text editor. (c) A leaderboard showing the top ten scores among a million players, with scores changing constantly. (d) A phone’s contact list, searched as the user types a name. (e) Detecting whether any of ten million uploaded files is a duplicate of another. (f) A print server’s job list, where urgent jobs may jump ahead.</p></li>
+<li><p>A colleague stores a set of 50 integers in a <code>std::set</code> “because lookups are logarithmic.” Suggest a simpler structure and predict how the two compare in speed and memory. Then measure.</p></li>
+<li><p>Trace an <code>LruCache</code> of capacity 3 through: put A, put B, put C, get A, put D, get B, put E, get A. After each operation give the order of the list, and say which gets fail.</p></li>
+<li><p>Add to <code>LruCache</code> a member <code>bool erase(const K&amp; key)</code>, and a member that returns the key that would be evicted next without evicting it. Both should be <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>.</p></li>
+<li><p>An <strong>LFU</strong> cache evicts the <em>least frequently</em> used entry instead. Explain why keeping the entries in a priority queue ordered by use count makes <code>get</code> cost <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math>, and why a <code>std::priority_queue</code> is not sufficient as it stands. (What operation is missing?)</p></li>
+<li><p>Draw the trie containing <code>car</code>, <code>card</code>, <code>care</code>, <code>cat</code>, <code>do</code>, <code>dog</code>, and <code>dot</code>. How many nodes does it have? How many would a trie containing only <code>dog</code> have?</p></li>
+<li><p>Add <code>bool erase(const std::string&amp; word)</code> to <code>Trie</code>. A simple version just clears the <code>is_word</code> flag. A better version also deletes any nodes that are no longer on the path to any word. Implement the better version, recursively.</p></li>
+<li><p>Our trie node uses 208 bytes for its children. Rewrite <code>Node</code> to use a <code>std::map&lt;char, std::unique_ptr&lt;Node&gt;&gt;</code> instead. What are the costs of each operation now? Build both versions from a large word list and compare memory use (count nodes and multiply) and lookup time.</p></li>
+<li><p>Run the byte-pair-encoding program by hand on the corpus <code>aaab</code> (3 times), <code>aab</code> (2 times), and <code>ab</code> (4 times), for three merges.</p></li>
+<li><p>Explain how the idea of content addressing lets Git detect that a file has been corrupted on disk. Why must the hash function be <em>cryptographic</em> for this to be trustworthy against a deliberate attacker, when the hash functions of <a href="05-hashing.html">Chapter 5</a> were not?</p></li>
+<li><p>An LSM tree answers a lookup by checking several sorted files, newest first. Suppose there are 20 files and each has a Bloom filter with a 1% false-positive rate. For a key that is in none of the files, what is the expected number of files actually read? What would it be with no Bloom filters?</p></li>
+<li><p>A nearest-neighbor search over one million 1,000-dimensional embeddings, stored as <code>float</code>s, is done by linear scan. How much memory do the embeddings occupy? If computing one distance takes 250 nanoseconds, how long does one query take? At what number of queries per second does this stop being acceptable, and what does the approximate method give up to do better?</p></li>
+<li><p><strong>With a model, as ghostwriter, at last.</strong> Choose a structure this book did not implement: a skip list, a treap, or a red-black tree. Have a model write it, as a set with <code>insert</code>, <code>contains</code>, and <code>erase</code>. Then apply the seven-step checklist from the end of this chapter, in full, and write a one-page report: what you checked, what you found, and whether you would ship it.</p></li>
+<li><p><strong>Lab.</strong> <em>A tiny search engine.</em> Given a directory of text files, build an <strong>inverted index</strong>: a map from each word to the sorted list of documents that contain it. Support queries for a single word, for <code>A AND B</code> (intersect two sorted lists, with a merge), and for words beginning with a given prefix (a trie over the vocabulary, or a sorted vector with binary search). Put an LRU cache in front of the query function. Report the structures you chose and why, the time to build the index, and the query time with and without the cache.</p></li>
+</ol>
+</section>
+<section id="sec:wild-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Chapter notes</h2>
+<p>The trie was named by Fredkin <span class="citation" data-cites="fredkin1960">(<a href="#ref-fredkin1960" role="doc-biblioref">Fredkin 1960</a>)</span>; the structure itself had been described a year earlier by René de la Briandais. Byte-pair encoding was introduced as a compression method by Gage <span class="citation" data-cites="gage1994">(<a href="#ref-gage1994" role="doc-biblioref">Gage 1994</a>)</span> and brought to neural language models by Sennrich, Haddow, and Birch <span class="citation" data-cites="sennrich2016">(<a href="#ref-sennrich2016" role="doc-biblioref">Sennrich, Haddow, and Birch 2016</a>)</span>, whose paper uses the same four-word example as this chapter. The model architecture that those tokens are fed to is described in the paper that introduced it <span class="citation" data-cites="vaswani2017">(<a href="#ref-vaswani2017" role="doc-biblioref">Vaswani et al. 2017</a>)</span>.</p>
+<p>For storage engines, B-trees, and LSM trees, Kleppmann’s <em>Designing Data-Intensive Applications</em> <span class="citation" data-cites="kleppmann2017">(<a href="#ref-kleppmann2017" role="doc-biblioref">Kleppmann 2017</a>)</span> is the best single source, and a pleasure to read; the LSM tree’s original paper is O’Neil et al. <span class="citation" data-cites="oneil1996">(<a href="#ref-oneil1996" role="doc-biblioref">O’Neil et al. 1996</a>)</span>. The internals of Git are explained in the last chapter of <em>Pro Git</em> <span class="citation" data-cites="chacon2014">(<a href="#ref-chacon2014" role="doc-biblioref">Chacon and Straub 2014</a>)</span>, which is free online; hash trees are from Merkle <span class="citation" data-cites="merkle1988">(<a href="#ref-merkle1988" role="doc-biblioref">Merkle 1988</a>)</span>. The HNSW graph is from Malkov and Yashunin <span class="citation" data-cites="malkov2020">(<a href="#ref-malkov2020" role="doc-biblioref">Malkov and Yashunin 2020</a>)</span>. Okasaki’s <em>Purely Functional Data Structures</em> <span class="citation" data-cites="okasaki1998">(<a href="#ref-okasaki1998" role="doc-biblioref">Okasaki 1998</a>)</span> is the classic on persistent structures.</p>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-chacon2014" class="csl-entry" role="listitem">
+Chacon, Scott, and Ben Straub. 2014. <em>Pro Git</em>. 2nd ed. Apress. <a href="https://git-scm.com/book">https://git-scm.com/book</a>.
+</div>
+<div id="ref-fredkin1960" class="csl-entry" role="listitem">
+Fredkin, Edward. 1960. <span>“Trie Memory.”</span> <em>Communications of the ACM</em> 3 (9): 490–99.
+</div>
+<div id="ref-gage1994" class="csl-entry" role="listitem">
+Gage, Philip. 1994. <span>“A New Algorithm for Data Compression.”</span> <em>The C Users Journal</em> 12 (2): 23–38.
+</div>
+<div id="ref-kleppmann2017" class="csl-entry" role="listitem">
+Kleppmann, Martin. 2017. <em>Designing Data-Intensive Applications</em>. O’Reilly Media.
+</div>
+<div id="ref-malkov2020" class="csl-entry" role="listitem">
+Malkov, Yu. A., and D. A. Yashunin. 2020. <span>“Efficient and Robust Approximate Nearest Neighbor Search Using Hierarchical Navigable Small World Graphs.”</span> <em>IEEE Transactions on Pattern Analysis and Machine Intelligence</em> 42 (4): 824–36.
+</div>
+<div id="ref-merkle1988" class="csl-entry" role="listitem">
+Merkle, Ralph C. 1988. <span>“A Digital Signature Based on a Conventional Encryption Function.”</span> In <em>Advances in Cryptology – <span>CRYPTO</span> ’87</em>, 293:369–78. Lecture Notes in Computer Science. Springer.
+</div>
+<div id="ref-oneil1996" class="csl-entry" role="listitem">
+O’Neil, Patrick, Edward Cheng, Dieter Gawlick, and Elizabeth O’Neil. 1996. <span>“The Log-Structured Merge-Tree (<span>LSM</span>-Tree).”</span> <em>Acta Informatica</em> 33 (4): 351–85.
+</div>
+<div id="ref-okasaki1998" class="csl-entry" role="listitem">
+Okasaki, Chris. 1998. <em>Purely Functional Data Structures</em>. Cambridge University Press.
+</div>
+<div id="ref-sennrich2016" class="csl-entry" role="listitem">
+Sennrich, Rico, Barry Haddow, and Alexandra Birch. 2016. <span>“Neural Machine Translation of Rare Words with Subword Units.”</span> In <em>Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics (<span>ACL</span>)</em>, 1715–25.
+</div>
+<div id="ref-vaswani2017" class="csl-entry" role="listitem">
+Vaswani, Ashish, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017. <span>“Attention Is All You Need.”</span> In <em>Advances in Neural Information Processing Systems 30 (<span>NIPS</span> 2017)</em>, 5998–6008.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="09-graphs.html"><span>← Previous</span>Graphs</a>
+<a class="next" href="a1-toolchain.html"><span>Next →</span>The Toolchain</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+<script src="assets/viz/core.js"></script>
+<script src="assets/viz/trie.js"></script>
+<script>Viz.mountAll();</script>
+</body>
+</html>

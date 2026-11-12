@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recursion and Trees · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-chapter">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Chapter 6: Recursion and Trees</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class="current"><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+<ol class="secs">
+<li><a href="#sec:recursion"><span class="n">6.1</span> Recursion</a></li>
+<li><a href="#sec:trees"><span class="n">6.2</span> Trees</a></li>
+<li><a href="#sec:bst"><span class="n">6.3</span> Binary search trees</a></li>
+<li><a href="#sec:bst-erase"><span class="n">6.4</span> Removal</a></li>
+<li><a href="#sec:shape"><span class="n">6.5</span> The shape problem</a></li>
+<li><a href="#sec:trees-ex">Exercises</a></li>
+<li><a href="#sec:trees-notes">Chapter notes</a></li>
+</ol>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:trees">
+<p class="kicker">
+Chapter 6 · Week 6
+</p>
+<h1>
+Recursion and Trees
+</h1>
+</header>
+<aside class="callout goals"><p class="callout-title"><span class="lab">This week</span></p>
+<p>By the end of this week you should be able to:</p>
+<ul>
+<li>write and reason about recursive functions, identifying the base case and the smaller subproblem, and estimate their cost;</li>
+<li>use the vocabulary of trees precisely: root, leaf, depth, height, subtree;</li>
+<li>explain what <code>std::unique_ptr</code> is and use it to express ownership of tree nodes;</li>
+<li>implement a binary search tree with search, insertion, removal, and the standard traversals;</li>
+<li>state the binary-search-tree invariant <em>correctly</em>, and write a function that checks it;</li>
+<li>explain why the cost of every operation depends on the tree’s height, and how badly that can go.</li>
+</ul>
+</aside>
+<p>Take stock of where we are. A sorted vector can be searched in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math> time, but inserting into it costs <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>. A linked list can be modified in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> time at a known position, but searching it costs <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>. A hash table does both in expected constant time, but in exchange it throws away all information about <em>order</em>: it cannot tell you the smallest key, the next key after a given one, or all the keys between two bounds.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 6.1</span></p>
+<p>Binary search is fast because each comparison discards half of the remaining elements. A linked structure is flexible because elements never have to move. Can you imagine a <em>linked</em> structure in which each comparison discards half of the remaining nodes? Where would the search have to start, and how many <code>next</code> pointers would each node need?</p>
+<details class="answer"><summary>Answer</summary>
+<p>The search would have to start at the <em>middle</em> element, since that is what binary search compares against first. From there it needs to go to the middle of the left half or the middle of the right half. So each node needs two pointers: one to the “middle” of everything smaller, and one to the “middle” of everything larger. That structure is a binary search tree.</p>
+</details>
+</aside>
+<p>Trees are the third great family of data structures, after arrays and hash tables, and they are what you reach for when you need both fast search and order. They are also the natural home of <strong>recursion</strong>, a way of thinking about problems that you may have met briefly before and are about to need constantly. So this chapter begins there.</p>
+<section id="sec:recursion" class="level2">
+<h2><span class="secnum">6.1</span> Recursion</h2>
+<p>A function is <strong>recursive</strong> if it calls itself. That sounds circular, but a well-formed recursive function is no more circular than a staircase. It solves a problem by reducing it to a <em>smaller instance of the same problem</em>, and at the bottom there is an instance small enough to answer directly.</p>
+<div class="listing"><div class="listing-file">code/ch06/recursion.cpp</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>uint64_t factorial<span class="op">(</span><span class="dt">unsigned</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">)</span> <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span>              <span class="co">// base case: nothing left to multiply</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> n <span class="op">*</span> factorial<span class="op">(</span>n <span class="op">-</span> <span class="dv">1</span><span class="op">);</span>       <span class="co">// recursive case: a smaller problem</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Every recursive function has the same two parts.</p>
+<ul>
+<li>A <strong>base case</strong>: an input so small that the answer is immediate. Here, the factorial of 0 or 1 is 1.</li>
+<li>A <strong>recursive case</strong>: the function calls itself on a <em>smaller</em> input and uses the result. Here, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>!</mi><mo>=</mo><mi>n</mi><mo>⋅</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>−</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>!</mi></mrow><annotation encoding="application/x-tex">n! = n \cdot (n-1)!</annotation></semantics></math>.</li>
+</ul>
+<p>Two things must hold for the recursion to be correct. Every chain of recursive calls must eventually reach a base case; that is why the recursive call must be on a smaller problem. And the function must give the right answer <em>assuming that its recursive calls give the right answers</em>. Checking the second condition takes a small act of faith, and it is the habit to cultivate: when you write or read <code>n * factorial(n - 1)</code>, do not mentally descend into the inner call. Assume that it returns <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>−</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>!</mi></mrow><annotation encoding="application/x-tex">(n-1)!</annotation></semantics></math>, as advertised, and ask only whether, given that, this call returns <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>!</mi></mrow><annotation encoding="application/x-tex">n!</annotation></semantics></math>.</p>
+<p>You already know the machinery that makes recursion work. It is the call stack of <a href="01-memory.html#sec:lifetimes">Section 1.5</a>. Each call gets its own stack frame with its own copy of <code>n</code>. <code>factorial(4)</code> calls <code>factorial(3)</code>, which calls <code>factorial(2)</code>, which calls <code>factorial(1)</code>; four frames are stacked up, each waiting for the one above it. Then the base case returns 1, and the frames come off one at a time, each multiplying on its way out.</p>
+<p>That picture also tells you what recursion costs. The <em>time</em> is the total number of calls times the work done in each. The <em>space</em> is the maximum depth of the stack, since each pending call occupies a frame. <code>factorial(n)</code> makes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> calls and nests them <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> deep: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> time and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> space. A loop would use <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> space, and for a function this simple a loop is the better choice. Recursion shows its worth on problems that split into <em>more than one</em> subproblem.</p>
+<div class="listing"><div class="listing-file">code/ch06/recursion.cpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Sum of v[lo..hi), by splitting the range in half.</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> <span class="dt">long</span> sum<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&amp;</span> v<span class="op">,</span> <span class="bu">std::</span>size_t lo<span class="op">,</span> <span class="bu">std::</span>size_t hi<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>hi <span class="op">-</span> lo <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span>                 <span class="co">// empty range</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>hi <span class="op">-</span> lo <span class="op">==</span> <span class="dv">1</span><span class="op">)</span> <span class="cf">return</span> v<span class="op">[</span>lo<span class="op">];</span>             <span class="co">// one element</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t mid <span class="op">=</span> lo <span class="op">+</span> <span class="op">(</span>hi <span class="op">-</span> lo<span class="op">)</span> <span class="op">/</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> sum<span class="op">(</span>v<span class="op">,</span> lo<span class="op">,</span> mid<span class="op">)</span> <span class="op">+</span> sum<span class="op">(</span>v<span class="op">,</span> mid<span class="op">,</span> hi<span class="op">);</span>   <span class="co">// two half-size problems</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>This function sums a range by splitting it in half, summing each half recursively, and adding the results. It is not a sensible way to add up a vector, but its shape, called <strong>divide and conquer</strong>, is the shape of the most important algorithms in the next few chapters. Notice the half-open ranges: the two halves <code>[lo, mid)</code> and <code>[mid, hi)</code> fit together with no overlap and no gap.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 6.2</span></p>
+<p>For a vector of 8 elements, how many calls to <code>sum</code> are made in all, counting the first? How deep does the stack get?</p>
+<details class="answer"><summary>Answer</summary>
+<p>The calls form a tree: one call on 8 elements, two on 4, four on 2, eight on 1. That is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mo>+</mo><mn>4</mn><mo>+</mo><mn>8</mn><mo>=</mo><mn>15</mn></mrow><annotation encoding="application/x-tex">1 + 2 + 4 + 8 = 15</annotation></semantics></math> calls. The stack depth is only 4, the number of levels, because the two recursive calls happen one after the other, and the first has finished and released its frames before the second begins. In general: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>n</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">2n - 1</annotation></semantics></math> calls, depth <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">\log_2 n + 1</annotation></semantics></math>.</p>
+</details>
+</aside>
+<p>Recursion can also make a problem dramatically cheaper.</p>
+<div class="listing"><div class="listing-file">code/ch06/recursion.cpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// x to the power n, using about log2(n) multiplications.</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> power<span class="op">(</span><span class="dt">double</span> x<span class="op">,</span> <span class="dt">unsigned</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="cf">return</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> half <span class="op">=</span> power<span class="op">(</span>x<span class="op">,</span> n <span class="op">/</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">%</span> <span class="dv">2</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="cf">return</span> half <span class="op">*</span> half<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> half <span class="op">*</span> half <span class="op">*</span> x<span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Computing <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>x</mi><mi>n</mi></msup><annotation encoding="application/x-tex">x^n</annotation></semantics></math> by repeated multiplication takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n - 1</annotation></semantics></math> multiplications. This version computes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>x</mi><mrow><mi>n</mi><mi>/</mi><mn>2</mn></mrow></msup><annotation encoding="application/x-tex">x^{n/2}</annotation></semantics></math> once and squares it. Each call halves <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>, so there are about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math> calls: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>x</mi><mn>1000</mn></msup><annotation encoding="application/x-tex">x^{1000}</annotation></semantics></math> in ten steps or so.</p>
+<p>And it can make a problem catastrophically expensive.</p>
+<div class="listing"><div class="listing-file">code/ch06/recursion.cpp</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>uint64_t calls <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>uint64_t fib<span class="op">(</span><span class="dt">unsigned</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span>calls<span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">2</span><span class="op">)</span> <span class="cf">return</span> n<span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fib<span class="op">(</span>n <span class="op">-</span> <span class="dv">1</span><span class="op">)</span> <span class="op">+</span> fib<span class="op">(</span>n <span class="op">-</span> <span class="dv">2</span><span class="op">);</span>   <span class="co">// two overlapping subproblems</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<pre class="console"><code>fib(10) = 55 took 177 calls
+fib(20) = 6765 took 21891 calls
+fib(30) = 832040 took 2692537 calls</code></pre>
+<p>The Fibonacci function calls itself twice, and the two calls do <em>overlapping</em> work: <code>fib(n - 1)</code> computes <code>fib(n - 2)</code> all over again, and so on down. The number of calls grows exponentially. The lesson is that recursion is safe when the subproblems are <em>disjoint</em>, as the two halves of a range are. When they overlap, a plain recursive solution recomputes the same things many times. (Remembering the answers to subproblems, so that each is computed once, turns out to be a powerful general technique, called dynamic programming, that you will study in an algorithms course.)</p>
+<p>The costs of the common recursive shapes are worth knowing by sight. Write <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">T(n)</annotation></semantics></math> for the time on an input of size <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Shape of the recursion</th>
+<th style="text-align: left;">Example</th>
+<th style="text-align: left;">Time</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">one call on a problem smaller by one</td>
+<td style="text-align: left;"><code>factorial</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">one call on a problem half the size</td>
+<td style="text-align: left;"><code>power</code>, binary search</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">two calls on halves, constant extra work</td>
+<td style="text-align: left;"><code>sum</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">two calls on halves, linear extra work</td>
+<td style="text-align: left;">mergesort (<a href="08-heaps-sorting.html">Chapter 8</a>)</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">two calls on problems smaller by one or two</td>
+<td style="text-align: left;"><code>fib</code></td>
+<td style="text-align: left;">exponential</td>
+</tr>
+</tbody>
+</table>
+<aside class="callout byhand"><p class="callout-title"><span class="lab">By hand first</span></p>
+<p>Trace <code>sum(v, 0, 5)</code> on a five-element vector by drawing its <strong>call tree</strong>: one box per call, labeled with its <code>lo</code> and <code>hi</code>, with lines down to the calls it makes, and the returned value written beside each box as it finishes. Then do the same for <code>power(2.0, 13)</code>.</p>
+<p>Being able to trace a recursion by hand is how you debug one, and being able to <em>stop</em> tracing and trust the recursive call is how you write one. Both come only from practice, and neither comes from watching a model do it. A model will draw you a call tree instantly and it will usually be right; you will have learned nothing about recursion from it, and recursion is the one idea in this chapter that everything else depends on.</p>
+</aside>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Once you can trace small recursions yourself, a model is a good source of fresh ones.</p>
+<blockquote>
+<p>Give me a short recursive C++ function I have probably not seen before, with a specific call to it. Ask me (1) what it returns and (2) how many calls are made in total. Don’t reveal the answers until I reply. If I am wrong, don’t just correct me: show me the call tree.</p>
+</blockquote>
+<p>Compile and run the function with a call counter, as <code>fib</code> does above, to settle any disagreement. On questions of <em>counting</em> calls, a model’s arithmetic is not to be taken on trust.</p>
+</aside>
+</section>
+<section id="sec:trees" class="level2">
+<h2><span class="secnum">6.2</span> Trees</h2>
+<p>A <strong>tree</strong> is a collection of nodes connected so that there is exactly one path between any two of them. One node is singled out as the <strong>root</strong>. Computer scientists draw trees upside down, with the root at the top.</p>
+<figure class="fig" id="fig:tree-anatomy"><svg class="figsvg" viewBox="0 0 640 250" width="640" height="250" role="img" aria-label="A binary tree with root, leaves, depths and a subtree labelled." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-none f-accent-soft" x="122" y="70" width="200" height="164" rx="12" stroke-width="1.3"/>
+<line class="s-muted f-none dash" x1="522.0" y1="40.0" x2="560.0" y2="40.0" stroke-width="0.8"/>
+<text class="t-muted" x="566.0" y="40.0" text-anchor="start" dominant-baseline="central" font-size="11">depth 0</text>
+<line class="s-muted f-none dash" x1="522.0" y1="96.0" x2="560.0" y2="96.0" stroke-width="0.8"/>
+<text class="t-muted" x="566.0" y="96.0" text-anchor="start" dominant-baseline="central" font-size="11">depth 1</text>
+<line class="s-muted f-none dash" x1="522.0" y1="152.0" x2="560.0" y2="152.0" stroke-width="0.8"/>
+<text class="t-muted" x="566.0" y="152.0" text-anchor="start" dominant-baseline="central" font-size="11">depth 2</text>
+<line class="s-muted f-none dash" x1="522.0" y1="208.0" x2="560.0" y2="208.0" stroke-width="0.8"/>
+<text class="t-muted" x="566.0" y="208.0" text-anchor="start" dominant-baseline="central" font-size="11">depth 3</text>
+<line class="s-ink f-none" x1="282.9" y1="164.9" x2="257.1" y2="195.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="186.9" y1="108.9" x2="161.1" y2="139.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="212.7" y1="104.6" x2="279.3" y2="143.4" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="426.9" y1="108.9" x2="401.1" y2="139.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="449.1" y1="108.9" x2="474.9" y2="139.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="326.2" y1="46.2" x2="213.8" y2="89.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="356.7" y1="48.6" x2="423.3" y2="87.4" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="150" cy="152" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="150.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="13">20</text>
+<circle class="s-ink f-paper" cx="198" cy="96" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="198.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="13">30</text>
+<circle class="s-ink f-paper" cx="246" cy="208" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="246.0" y="208.0" text-anchor="middle" dominant-baseline="central" font-size="13">35</text>
+<circle class="s-ink f-paper" cx="294" cy="152" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="294.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="13">40</text>
+<circle class="s-ink f-paper" cx="342" cy="40" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="342.0" y="40.0" text-anchor="middle" dominant-baseline="central" font-size="13">50</text>
+<circle class="s-ink f-paper" cx="390" cy="152" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="390.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="13">60</text>
+<circle class="s-ink f-paper" cx="438" cy="96" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="438.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="13">70</text>
+<circle class="s-ink f-paper" cx="486" cy="152" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="486.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="13">80</text>
+<text class="t-ink b" x="412.0" y="20.0" text-anchor="start" dominant-baseline="central" font-size="12">root</text>
+<line class="s-ink f-none" x1="408.0" y1="22.0" x2="366.8" y2="32.5" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="361.0,34.0 370.6,35.3 368.8,28.3"/>
+<text class="t-ink b" x="80.0" y="186.0" text-anchor="middle" dominant-baseline="central" font-size="12">a leaf</text>
+<line class="s-ink f-none" x1="98.0" y1="178.0" x2="128.5" y2="164.4" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="134.0,162.0 124.3,162.4 127.2,168.9"/>
+<text class="t-accent" x="202.0" y="248.0" text-anchor="middle" dominant-baseline="central" font-size="11">the left subtree of the root</text>
+<text class="t-muted" x="500.0" y="70.0" text-anchor="start" dominant-baseline="central" font-size="11">parent of 60 and 80</text>
+<line class="s-muted f-none" x1="496.0" y1="74.0" x2="460.7" y2="85.2" stroke-width="1.3"/>
+<polygon class="s-none f-muted" points="455.0,87.0 464.7,87.7 462.5,80.8"/>
+</svg><figcaption>
+<span class="fignum">Figure 6.1</span> The anatomy of a binary tree. Depth is counted from the root, which is at depth 0. The height of this tree is 4: the number of nodes on the longest path from the root to a leaf. The shaded region is the left subtree of the root, which is itself a tree.
+</figcaption></figure>
+<p>The vocabulary is borrowed from family trees and from botany, with no great consistency.</p>
+<ul>
+<li>Each node except the root has one <strong>parent</strong>, the node directly above it. The nodes directly below a node are its <strong>children</strong>.</li>
+<li>A node with no children is a <strong>leaf</strong>.</li>
+<li>The <strong>depth</strong> of a node is the number of links on the path from the root to it. The root has depth 0.</li>
+<li>The <strong>height</strong> of a tree is the number of nodes on the longest path from the root down to a leaf. An empty tree has height 0, and a tree with one node has height 1. (Some books count links instead of nodes, giving a number one smaller. Check the convention whenever you read about trees.)</li>
+<li>A node together with everything below it is a <strong>subtree</strong>.</li>
+</ul>
+<p>In a <strong>binary tree</strong>, each node has at most two children, and they are distinguished: a <em>left</em> child and a <em>right</em> child.</p>
+<p>The last item on the vocabulary list is the important one. It leads to a definition of binary trees that is more useful than any picture:</p>
+<blockquote>
+<p>A binary tree is either <strong>empty</strong>, or it is a <strong>node</strong> with a left subtree and a right subtree, each of which is a binary tree.</p>
+</blockquote>
+<p>The definition is recursive: it defines trees in terms of smaller trees, with the empty tree as its base case. This is why trees and recursion go together. Almost any function on a tree can be written by following the definition: handle the empty tree; otherwise handle the node, and let recursive calls handle the two subtrees.</p>
+<section id="sec:unique-ptr" class="level3 unnumbered">
+<h3 class="unnumbered">Nodes that own their children</h3>
+<p>Here is the representation.</p>
+<div class="listing"><div class="listing-file">code/ch06/bst.hpp</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    K key<span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Node<span class="op">&gt;</span> left<span class="op">;</span>    <span class="co">// owns the whole left subtree</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Node<span class="op">&gt;</span> right<span class="op">;</span>   <span class="co">// owns the whole right subtree</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> Node<span class="op">(</span>K k<span class="op">)</span> <span class="op">:</span> key<span class="op">(</span><span class="bu">std::</span>move<span class="op">(</span>k<span class="op">))</span> <span class="op">{}</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="kw">using</span> Link <span class="op">=</span> <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Node<span class="op">&gt;;</span>   <span class="co">// an owning pointer to a subtree</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>Link <span class="va">root_</span><span class="op">;</span>                <span class="co">// null when the tree is empty</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t <span class="va">size_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span></code></pre></div>
+</div>
+<p>In <a href="04-links.html">Chapter 4</a> the nodes of a list were joined by raw pointers, and we wrote the destructor and copy operations by hand. Here the child pointers are <code>std::unique_ptr&lt;Node&gt;</code>. This is the standard library’s <strong>owning pointer</strong>, and it is how modern C++ expresses the statement “this pointer is responsible for deleting what it points to.”</p>
+<p>A <code>unique_ptr</code> behaves like a pointer, with three differences.</p>
+<ul>
+<li>When a <code>unique_ptr</code> is destroyed, it deletes the object it points to. No <code>delete</code> is ever written by hand.</li>
+<li>A <code>unique_ptr</code> <strong>cannot be copied</strong>. If it could, two pointers would own the same object and delete it twice, which is the shallow-copy bug of <a href="03-vector.html#sec:rule-of-three">Section 3.3</a>. The compiler rejects the attempt.</li>
+<li>A <code>unique_ptr</code> <strong>can be moved</strong>, with <code>std::move</code>. Ownership passes to the destination, and the source becomes null.</li>
+</ul>
+<p>You create the owned object with <code>std::make_unique&lt;Node&gt;(...)</code>, which allocates it and returns the <code>unique_ptr</code>. When you need to look at the object without taking ownership, <code>.get()</code> returns an ordinary raw pointer. This book uses raw pointers in exactly that role: as <em>observers</em> that walk a structure owned by someone else.</p>
+<p>Now consider what happens when a <code>Bst</code> is destroyed. Its member <code>root_</code> is destroyed, which deletes the root node. Destroying the root node destroys <em>its</em> members <code>left</code> and <code>right</code>, which delete the two children, and so on down. The entire tree is freed, correctly, and we did not write a line of code to do it. Nor can a <code>Bst</code> be accidentally copied, since its <code>unique_ptr</code> member cannot be. Ownership has been stated in the <em>types</em>, and the compiler does the rest.</p>
+<p>Moving needs one small piece of help. The compiler’s default move would move <code>root_</code>, leaving the source’s root null, but would merely <em>copy</em> the plain integer <code>size_</code>, leaving the source claiming to hold nodes it no longer has. So the class defines its two move operations by hand, to set the source’s size to zero. Keep an eye out for this whenever a class stores a count beside the thing it counts.</p>
+<aside class="callout note"><p class="callout-title"><span class="lab">Aside</span></p>
+<p>The automatic destruction is recursive, one stack frame per level of the tree, and so is the <code>insert</code> function later in this chapter. For the tall, thin trees we will meet at the end of the chapter, a tree with a hundred thousand nodes can be a hundred thousand levels deep, and inserting into it or destroying it can overflow the stack. This is also why the linked list of <a href="04-links.html">Chapter 4</a> used raw pointers and a loop: a list is the tallest, thinnest tree there is. Production code that might build degenerate trees destroys them iteratively. Balanced trees, the subject of the next chapter, never get deep enough for this to matter.</p>
+</aside>
+</section>
+<section id="sec:tree-recursion" class="level3 unnumbered">
+<h3 class="unnumbered">Recursion on trees</h3>
+<p>Here are two functions written directly from the recursive definition.</p>
+<div class="listing"><div class="listing-file">code/ch06/bst.hpp</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Number of nodes on the longest path from n down to a leaf.</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">int</span> height<span class="op">(</span><span class="at">const</span> Node<span class="op">*</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> l <span class="op">=</span> height<span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">());</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> r <span class="op">=</span> height<span class="op">(</span>n<span class="op">-&gt;</span>right<span class="op">.</span>get<span class="op">());</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="op">+</span> <span class="op">(</span>l <span class="op">&gt;</span> r <span class="op">?</span> l <span class="op">:</span> r<span class="op">);</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="bu">std::</span>size_t count<span class="op">(</span><span class="at">const</span> Node<span class="op">*</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="op">+</span> count<span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">())</span> <span class="op">+</span> count<span class="op">(</span>n<span class="op">-&gt;</span>right<span class="op">.</span>get<span class="op">());</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Read <code>height</code> as a sentence: the height of an empty tree is zero; otherwise it is one, for this node, plus the height of the taller subtree. Try to write it with a loop and you will appreciate what the recursion is doing for you.</p>
+<p>How tall must a binary tree be to hold <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> nodes? At depth 0 there is room for one node; at depth 1, two; at depth 2, four. A tree of height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> holds at most <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mo>+</mo><mn>4</mn><mo>+</mo><mi>⋯</mi><mo>+</mo><msup><mn>2</mn><mrow><mi>h</mi><mo>−</mo><mn>1</mn></mrow></msup><mo>=</mo><msup><mn>2</mn><mi>h</mi></msup><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">1 + 2 + 4 + \cdots + 2^{h-1} = 2^h - 1</annotation></semantics></math> nodes. Turned around: a tree with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> nodes has height <strong>at least</strong> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\log_2(n + 1)</annotation></semantics></math>. It has height <strong>at most</strong> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>, when every node has a single child and the “tree” is really a linked list. A million nodes can form a tree of height 20, or a tree of height 1,000,000. The difference between those two will occupy us for the rest of this chapter and all of the next.</p>
+</section>
+<section id="sec:traversals" class="level3 unnumbered">
+<h3 class="unnumbered">Traversals</h3>
+<p>To <strong>traverse</strong> a tree is to visit every node once. For a list there was one natural order. For a tree there are several, and the recursive ones differ only in <em>when</em> a node is visited relative to its subtrees.</p>
+<div class="listing"><div class="listing-file">code/ch06/bst.hpp</div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> Visit<span class="op">&gt;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">void</span> in_order<span class="op">(</span><span class="at">const</span> Node<span class="op">*</span> n<span class="op">,</span> Visit<span class="op">&amp;</span> visit<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    in_order<span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">(),</span> visit<span class="op">);</span>    <span class="co">// everything smaller</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    visit<span class="op">(</span>n<span class="op">-&gt;</span>key<span class="op">);</span>                     <span class="co">// then this node</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    in_order<span class="op">(</span>n<span class="op">-&gt;</span>right<span class="op">.</span>get<span class="op">(),</span> visit<span class="op">);</span>   <span class="co">// then everything larger</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> Visit<span class="op">&gt;</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">void</span> pre_order<span class="op">(</span><span class="at">const</span> Node<span class="op">*</span> n<span class="op">,</span> Visit<span class="op">&amp;</span> visit<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    visit<span class="op">(</span>n<span class="op">-&gt;</span>key<span class="op">);</span>                     <span class="co">// this node first</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    pre_order<span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">(),</span> visit<span class="op">);</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    pre_order<span class="op">(</span>n<span class="op">-&gt;</span>right<span class="op">.</span>get<span class="op">(),</span> visit<span class="op">);</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<ul>
+<li><strong>Pre-order</strong>: the node, then its left subtree, then its right. Parents come before children. Used for copying a tree, or printing an outline.</li>
+<li><strong>In-order</strong>: the left subtree, then the node, then the right subtree.</li>
+<li><strong>Post-order</strong>: both subtrees, then the node. Children come before parents. Used when a node’s result depends on its children’s, as in <code>height</code>, and for deleting a tree.</li>
+</ul>
+<p>Each visits <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> nodes and does constant work at each, so each is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>.</p>
+<p>The fourth traversal is not recursive. <strong>Level-order</strong> visits the root, then all nodes at depth 1, then all at depth 2, and so on. It needs to remember, while working across one level, the children that are waiting on the next, in the order they were discovered. First discovered, first visited: that is a queue.</p>
+<div class="listing"><div class="listing-file">code/ch06/bst.hpp</div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Visits keys level by level, top to bottom, left to right.</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> Visit<span class="op">&gt;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> level_order<span class="op">(</span>Visit visit<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>queue<span class="op">&lt;</span><span class="at">const</span> Node<span class="op">*&gt;</span> waiting<span class="op">;</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="va">root_</span><span class="op">)</span> waiting<span class="op">.</span>push<span class="op">(</span><span class="va">root_</span><span class="op">.</span>get<span class="op">());</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(!</span>waiting<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> Node<span class="op">*</span> n <span class="op">=</span> waiting<span class="op">.</span>front<span class="op">();</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>        waiting<span class="op">.</span>pop<span class="op">();</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>        visit<span class="op">(</span>n<span class="op">-&gt;</span>key<span class="op">);</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">)</span> waiting<span class="op">.</span>push<span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">());</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>n<span class="op">-&gt;</span>right<span class="op">)</span> waiting<span class="op">.</span>push<span class="op">(</span>n<span class="op">-&gt;</span>right<span class="op">.</span>get<span class="op">());</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Compare this with the recursive traversals. They use a stack (the call stack) and go <em>deep</em> first. Level-order uses a queue and goes <em>wide</em> first. The same contrast, between depth-first and breadth-first exploration, will reappear for graphs in <a href="09-graphs.html">Chapter 9</a>.</p>
+</section>
+</section>
+<section id="sec:bst" class="level2">
+<h2><span class="secnum">6.3</span> Binary search trees</h2>
+<p>A binary tree is just a shape. To make it useful for searching we impose an invariant on where the keys go.</p>
+<blockquote>
+<p><strong>The binary search tree invariant.</strong> For every node, all keys in its left subtree are less than the node’s key, and all keys in its right subtree are greater.</p>
+</blockquote>
+<p>A binary tree that satisfies this is a <strong>binary search tree</strong>, or BST. Read the invariant carefully: it says <em>all keys in the subtree</em>, not merely “the left child.” We will see shortly what goes wrong if you remember it the weaker way.</p>
+<div class="listing"><div class="listing-file">code/ch06/bst_test.cpp</div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>Bst<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> t<span class="op">;</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> k <span class="op">:</span> <span class="op">{</span><span class="dv">50</span><span class="op">,</span> <span class="dv">30</span><span class="op">,</span> <span class="dv">70</span><span class="op">,</span> <span class="dv">20</span><span class="op">,</span> <span class="dv">40</span><span class="op">,</span> <span class="dv">60</span><span class="op">,</span> <span class="dv">80</span><span class="op">,</span> <span class="dv">35</span><span class="op">})</span> t<span class="op">.</span>insert<span class="op">(</span>k<span class="op">);</span></span></code></pre></div>
+</div>
+<figure class="fig viz" id="fig:bst"><div class="viz-widget" data-viz="bst"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 250" width="640" height="250" role="img" aria-label="A binary search tree of eight keys with the search path to 35 highlighted." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="223.2" y1="165.1" x2="196.8" y2="196.9" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="127.2" y1="107.1" x2="100.8" y2="138.9" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="152.6" y1="102.8" x2="219.4" y2="143.2" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="367.2" y1="107.1" x2="340.8" y2="138.9" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="388.8" y1="107.1" x2="415.2" y2="138.9" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="266.2" y1="42.4" x2="153.8" y2="87.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="296.6" y1="44.8" x2="363.4" y2="85.2" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="90" cy="152" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="90.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="13">20</text>
+<circle class="s-accent f-accent-soft" cx="138" cy="94" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="138.0" y="94.0" text-anchor="middle" dominant-baseline="central" font-size="13">30</text>
+<circle class="s-accent2 f-accent2-soft" cx="186" cy="210" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="186.0" y="210.0" text-anchor="middle" dominant-baseline="central" font-size="13">35</text>
+<circle class="s-accent f-accent-soft" cx="234" cy="152" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="234.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="13">40</text>
+<circle class="s-accent f-accent-soft" cx="282" cy="36" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="282.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="13">50</text>
+<circle class="s-ink f-paper" cx="330" cy="152" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="330.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="13">60</text>
+<circle class="s-ink f-paper" cx="378" cy="94" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="378.0" y="94.0" text-anchor="middle" dominant-baseline="central" font-size="13">70</text>
+<circle class="s-ink f-paper" cx="426" cy="152" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="426.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="13">80</text>
+<text class="t-ink b" x="480.0" y="50.0" text-anchor="start" dominant-baseline="central" font-size="13">search for 35</text>
+<text class="t-ink mono" x="480.0" y="76.0" text-anchor="start" dominant-baseline="central" font-size="12">35 &lt; 50: go left</text>
+<text class="t-ink mono" x="480.0" y="98.0" text-anchor="start" dominant-baseline="central" font-size="12">35 &gt; 30: go right</text>
+<text class="t-ink mono" x="480.0" y="120.0" text-anchor="start" dominant-baseline="central" font-size="12">35 &lt; 40: go left</text>
+<text class="t-accent2 mono" x="480.0" y="142.0" text-anchor="start" dominant-baseline="central" font-size="12">35 = 35: found</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 6.2</span> The binary search tree produced by inserting 50, 30, 70, 20, 40, 60, 80, 35 in that order. The highlighted path is a search for 35: less than 50, go left; greater than 30, go right; less than 40, go left; found. In the web edition you can insert and remove keys, run the traversals, and try inserting keys in sorted order.
+</figcaption></figure>
+<section id="sec:bst-search" class="level3 unnumbered">
+<h3 class="unnumbered">Searching</h3>
+<p>To search for a key, start at the root. If the key is smaller than the node’s key, it can only be in the left subtree, by the invariant. If it is larger, it can only be in the right. Move to that child and repeat. If you arrive at an empty subtree, the key is not in the tree.</p>
+<div class="listing"><div class="listing-file">code/ch06/bst.hpp</div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> contains<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Node<span class="op">*</span> n <span class="op">=</span> <span class="va">root_</span><span class="op">.</span>get<span class="op">();</span>          <span class="co">// a non-owning &quot;observer&quot; pointer</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>n <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>key <span class="op">&lt;</span> n<span class="op">-&gt;</span>key<span class="op">)</span> n <span class="op">=</span> n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">();</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>n<span class="op">-&gt;</span>key <span class="op">&lt;</span> key<span class="op">)</span> n <span class="op">=</span> n<span class="op">-&gt;</span>right<span class="op">.</span>get<span class="op">();</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span>                 <span class="co">// neither is smaller: equal</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>This is binary search, performed by following pointers instead of computing midpoints. Each comparison discards an entire subtree. The code uses only <code>&lt;</code> to compare keys: if neither key is less than the other, they are taken to be equal. That is the convention of the C++ standard library, and it means a key type needs only a less-than operator to be stored in a tree.</p>
+<p>Because a search only walks downward, a loop is simpler than recursion here, and <code>n</code> is a raw observer pointer: we are looking, not owning.</p>
+</section>
+<section id="sec:bst-insert" class="level3 unnumbered">
+<h3 class="unnumbered">Inserting</h3>
+<p>A new key always goes in as a new leaf, at the spot where a search for it falls off the tree. The search finds an empty subtree, a null link, where the key would have been. That link is where the new node belongs.</p>
+<div class="listing"><div class="listing-file">code/ch06/bst.hpp</div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Insert key into the subtree that `link` owns. `link` is passed by</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co">// reference: it may be root_, or some node&#39;s left or right member.</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">bool</span> insert<span class="op">(</span>Link<span class="op">&amp;</span> link<span class="op">,</span> K key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>link<span class="op">)</span> <span class="op">{</span>                                   <span class="co">// an empty spot: put it here</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>        link <span class="op">=</span> <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Node<span class="op">&gt;(</span><span class="bu">std::</span>move<span class="op">(</span>key<span class="op">));</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>key <span class="op">&lt;</span> link<span class="op">-&gt;</span>key<span class="op">)</span> <span class="cf">return</span> insert<span class="op">(</span>link<span class="op">-&gt;</span>left<span class="op">,</span> <span class="bu">std::</span>move<span class="op">(</span>key<span class="op">));</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>link<span class="op">-&gt;</span>key <span class="op">&lt;</span> key<span class="op">)</span> <span class="cf">return</span> insert<span class="op">(</span>link<span class="op">-&gt;</span>right<span class="op">,</span> <span class="bu">std::</span>move<span class="op">(</span>key<span class="op">));</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span>                                  <span class="co">// already present</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The parameter is the interesting part. <code>Link&amp; link</code> is a <em>reference to the owning pointer</em> that leads to the current subtree. At the top it refers to <code>root_</code>. One level down it refers to some node’s <code>left</code> or <code>right</code> member. When the recursion reaches a null link, assigning to <code>link</code> attaches the new node at exactly the right place, whether that place is the root of an empty tree or deep inside a full one, and no special cases are needed. This is the pointer-to-pointer idea of <a href="04-links.html#sec:rewiring">Section 4.2</a>, in the more comfortable form of a reference.</p>
+<p>Inserting a key that is already present does nothing and returns <code>false</code>: this tree represents a <em>set</em>, with no duplicates.</p>
+</section>
+<section id="sec:bst-order" class="level3 unnumbered">
+<h3 class="unnumbered">What order buys you</h3>
+<p>Consider an in-order traversal of a binary search tree. It visits everything in the left subtree, all of which is smaller than the root; then the root; then everything in the right subtree, all of which is larger. Apply the same reasoning within each subtree, and you find that</p>
+<blockquote>
+<p><strong>an in-order traversal of a binary search tree visits the keys in increasing order.</strong></p>
+</blockquote>
+<p>The tree holds its keys sorted, implicitly, at all times, and delivers them in order in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> time. This is the first of several things that a hash table cannot do. Here are two more.</p>
+<div class="listing"><div class="listing-file">code/ch06/bst.hpp</div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Smallest key in the tree, or nullptr if the tree is empty.</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> K<span class="op">*</span> min<span class="op">()</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Node<span class="op">*</span> n <span class="op">=</span> <span class="va">root_</span><span class="op">.</span>get<span class="op">();</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">)</span> n <span class="op">=</span> n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">();</span>    <span class="co">// keep going left</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">&amp;</span>n<span class="op">-&gt;</span>key<span class="op">;</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Smallest key that is &gt;= key, or nullptr if there is none.</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> K<span class="op">*</span> lower_bound<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> K<span class="op">*</span> best <span class="op">=</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Node<span class="op">*</span> n <span class="op">=</span> <span class="va">root_</span><span class="op">.</span>get<span class="op">();</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>n <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>n<span class="op">-&gt;</span>key <span class="op">&lt;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>            n <span class="op">=</span> n<span class="op">-&gt;</span>right<span class="op">.</span>get<span class="op">();</span>           <span class="co">// too small: answer is to the right</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>            best <span class="op">=</span> <span class="op">&amp;</span>n<span class="op">-&gt;</span>key<span class="op">;</span>               <span class="co">// a candidate; look for a smaller one</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>            n <span class="op">=</span> n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">();</span></span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> best<span class="op">;</span></span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The smallest key is found by going left until you cannot. <code>lower_bound</code> finds the smallest key that is greater than or equal to a given one, the same question that <code>lower_bound_index</code> answered for a sorted vector in <a href="02-cost.html#sec:binary-search">Section 2.4</a>. It walks down the tree, remembering the best candidate seen so far. With it you can find the key nearest to a value, or the first entry on or after a given date. Add the ability to step from one key to the next, and you can list every key in a range.</p>
+<p>All of these, like <code>contains</code> and <code>insert</code>, walk one path from the root downward and do constant work at each node.</p>
+</section>
+</section>
+<section id="sec:bst-erase" class="level2">
+<h2><span class="secnum">6.4</span> Removal</h2>
+<p>Removing a key is the hardest of the basic operations, because removing a node from the middle of a tree leaves a hole that must be repaired without violating the invariant. There are three cases, in increasing order of difficulty.</p>
+<p><strong>The node is a leaf.</strong> Just remove it. Nothing else is affected.</p>
+<p><strong>The node has one child.</strong> Remove it and attach its only child in its place. Everything in that child’s subtree was already on the correct side of the removed node’s parent, so the invariant survives.</p>
+<p><strong>The node has two children.</strong> We cannot simply remove it, since there are two subtrees to reattach and only one place to put them. Instead we keep the node and replace its <em>key</em> with a different key that can legitimately sit in that position: one that is greater than everything in the left subtree and less than everything else in the right subtree. That key is the smallest key in the right subtree, the node’s <strong>in-order successor</strong>. The successor is found by taking one step right and then going left as far as possible. Since it is as far left as possible, it has no left child, so removing it from its old position is one of the two easy cases.</p>
+<figure class="fig" id="fig:bst-erase"><svg class="figsvg" viewBox="0 0 640 250" width="640" height="250" role="img" aria-label="Removing a node with two children by replacing its key with its successor's." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="172.6" y1="175.0" x2="155.4" y2="205.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="108.6" y1="119.0" x2="91.4" y2="149.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="127.3" y1="115.9" x2="168.7" y2="152.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="268.6" y1="119.0" x2="251.4" y2="149.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="283.4" y1="119.0" x2="300.6" y2="149.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="199.0" y1="57.6" x2="129.0" y2="98.4" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="223.3" y1="59.9" x2="264.7" y2="96.1" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="84" cy="162" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="84.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">20</text>
+<circle class="s-bad f-bad-soft" cx="116" cy="106" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="116.0" y="106.0" text-anchor="middle" dominant-baseline="central" font-size="13">30</text>
+<circle class="s-accent2 f-accent2-soft" cx="148" cy="218" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="148.0" y="218.0" text-anchor="middle" dominant-baseline="central" font-size="13">35</text>
+<circle class="s-ink f-paper" cx="180" cy="162" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="180.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">40</text>
+<circle class="s-ink f-paper" cx="212" cy="50" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="212.0" y="50.0" text-anchor="middle" dominant-baseline="central" font-size="13">50</text>
+<circle class="s-ink f-paper" cx="244" cy="162" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="244.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">60</text>
+<circle class="s-ink f-paper" cx="276" cy="106" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="276.0" y="106.0" text-anchor="middle" dominant-baseline="central" font-size="13">70</text>
+<circle class="s-ink f-paper" cx="308" cy="162" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="308.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">80</text>
+<text class="t-ink b" x="196.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="13">before: erase 30</text>
+<text class="t-bad" x="92.0" y="100.0" text-anchor="end" dominant-baseline="central" font-size="10">two</text>
+<text class="t-bad" x="92.0" y="112.0" text-anchor="end" dominant-baseline="central" font-size="10">children</text>
+<text class="t-accent2" x="148.0" y="244.0" text-anchor="middle" dominant-baseline="central" font-size="10">successor: leftmost in right subtree</text>
+<line class="s-ink f-none" x1="322.0" y1="120.0" x2="350.0" y2="120.0" stroke-width="1.8"/>
+<polygon class="s-none f-ink" points="356.0,120.0 347.0,116.4 347.0,123.6"/>
+<line class="s-ink f-none" x1="408.6" y1="119.0" x2="391.4" y2="149.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="423.4" y1="119.0" x2="440.6" y2="149.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="536.6" y1="119.0" x2="519.4" y2="149.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="551.4" y1="119.0" x2="568.6" y2="149.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="468.7" y1="59.9" x2="427.3" y2="96.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="491.3" y1="59.9" x2="532.7" y2="96.1" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="384" cy="162" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="384.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">20</text>
+<circle class="s-accent2 f-accent2-soft" cx="416" cy="106" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="416.0" y="106.0" text-anchor="middle" dominant-baseline="central" font-size="13">35</text>
+<circle class="s-ink f-paper" cx="448" cy="162" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="448.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">40</text>
+<circle class="s-ink f-paper" cx="480" cy="50" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="480.0" y="50.0" text-anchor="middle" dominant-baseline="central" font-size="13">50</text>
+<circle class="s-ink f-paper" cx="512" cy="162" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="512.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">60</text>
+<circle class="s-ink f-paper" cx="544" cy="106" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="544.0" y="106.0" text-anchor="middle" dominant-baseline="central" font-size="13">70</text>
+<circle class="s-ink f-paper" cx="576" cy="162" r="15" stroke-width="1.3"/>
+<text class="t-ink mono" x="576.0" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="13">80</text>
+<text class="t-ink b" x="480.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="13">after</text>
+<text class="t-muted" x="480.0" y="244.0" text-anchor="middle" dominant-baseline="central" font-size="10">35 moved up; its old node is gone</text>
+</svg><figcaption>
+<span class="fignum">Figure 6.3</span> Removing 30, a node with two children. Its in-order successor is 35, the leftmost node in its right subtree. The successor’s key is moved up to replace 30, and the successor’s old node, which has at most a right child, is unlinked.
+</figcaption></figure>
+<div class="listing"><div class="listing-file">code/ch06/bst.hpp</div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">bool</span> erase<span class="op">(</span>Link<span class="op">&amp;</span> link<span class="op">,</span> <span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>link<span class="op">)</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span>                               <span class="co">// not found</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>key <span class="op">&lt;</span> link<span class="op">-&gt;</span>key<span class="op">)</span> <span class="cf">return</span> erase<span class="op">(</span>link<span class="op">-&gt;</span>left<span class="op">,</span> key<span class="op">);</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>link<span class="op">-&gt;</span>key <span class="op">&lt;</span> key<span class="op">)</span> <span class="cf">return</span> erase<span class="op">(</span>link<span class="op">-&gt;</span>right<span class="op">,</span> key<span class="op">);</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// link owns the node to remove.</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>link<span class="op">-&gt;</span>left<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>        link <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>link<span class="op">-&gt;</span>right<span class="op">);</span>     <span class="co">// no left child: promote the right</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(!</span>link<span class="op">-&gt;</span>right<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>        link <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>link<span class="op">-&gt;</span>left<span class="op">);</span>      <span class="co">// no right child: promote the left</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Two children: find the successor, the leftmost node of the</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>        <span class="co">// right subtree. Move its key up here, then unlink it.</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>        Link<span class="op">*</span> succ <span class="op">=</span> <span class="op">&amp;</span>link<span class="op">-&gt;</span>right<span class="op">;</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="op">((*</span>succ<span class="op">)-&gt;</span>left<span class="op">)</span> succ <span class="op">=</span> <span class="op">&amp;(*</span>succ<span class="op">)-&gt;</span>left<span class="op">;</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>        link<span class="op">-&gt;</span>key <span class="op">=</span> <span class="bu">std::</span>move<span class="op">((*</span>succ<span class="op">)-&gt;</span>key<span class="op">);</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>        <span class="op">*</span>succ <span class="op">=</span> <span class="bu">std::</span>move<span class="op">((*</span>succ<span class="op">)-&gt;</span>right<span class="op">);</span></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The function first finds the node, recursing down with a reference to the owning link, just as <code>insert</code> did. When it finds the key, <code>link</code> is the pointer that owns the doomed node.</p>
+<p>In the easy cases, a single move assignment does everything. <code>link = std::move(link-&gt;right)</code> transfers ownership of the right child into <code>link</code>. The node that <code>link</code> previously owned is deleted by the <code>unique_ptr</code> as part of the assignment. No <code>delete</code>, no temporary, and nothing can leak. (If the node was a leaf, the right child is null, and <code>link</code> simply becomes null. The leaf case needs no code of its own.)</p>
+<p>In the hard case, <code>succ</code> walks down to the link that owns the successor. It is a raw pointer to a <code>Link</code>: we are again tracking “the pointer that will need to change.” The successor’s key is moved up, and the successor’s node is replaced by its right child, exactly as in the easy case.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 6.3</span></p>
+<p>In the two-child case, the code uses the smallest key of the right subtree. What other key in the tree could be moved into the node’s position instead, without breaking the invariant?</p>
+<details class="answer"><summary>Answer</summary>
+<p>The largest key in the <em>left</em> subtree, the in-order <strong>predecessor</strong>: one step left, then right as far as possible. It is greater than everything else in the left subtree and less than everything in the right. Either choice is correct.</p>
+</details>
+</aside>
+</section>
+<section id="sec:shape" class="level2">
+<h2><span class="secnum">6.5</span> The shape problem</h2>
+<p>Every operation in this chapter, searching, inserting, removing, finding a minimum or a lower bound, starts at the root and walks down one path. Each takes time proportional to the length of that path, which is at most the height of the tree, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math>.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>contains</code>, <code>insert</code>, <code>erase</code>, <code>min</code>, <code>lower_bound</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(h)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">any traversal</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+</tbody>
+</table>
+<p>So the cost of a binary search tree is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(h)</annotation></semantics></math>, and everything depends on what <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> is. We know that <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> lies somewhere between about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>. Which is it?</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 6.4</span></p>
+<p>Starting from an empty tree, insert the keys 1, 2, 3, 4, 5, 6, 7 in that order. Draw the result. What is its height? How many comparisons does it take to find 7?</p>
+<details class="answer"><summary>Answer</summary>
+<p>Each new key is larger than every key already present, so each becomes the right child of the previous one. The result is a chain leaning to the right: a linked list in all but name, of height 7. Finding 7 takes seven comparisons. Insert the same keys in the order 4, 2, 6, 1, 3, 5, 7, and you get a perfectly balanced tree of height 3.</p>
+</details>
+</aside>
+<p><strong>The shape of a binary search tree is determined by the order in which keys are inserted.</strong> <a href="#fig:shapes">Figure 6.4</a> shows the same seven keys in the best shape and the worst.</p>
+<figure class="fig" id="fig:shapes"><svg class="figsvg" viewBox="0 0 640 262" width="640" height="262" role="img" aria-label="A balanced tree and a degenerate chain holding the same seven keys." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="69.0" y1="129.2" x2="49.0" y2="158.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="87.0" y1="129.2" x2="107.0" y2="158.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="221.0" y1="129.2" x2="201.0" y2="158.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="239.0" y1="129.2" x2="259.0" y2="158.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="141.1" y1="69.5" x2="90.9" y2="106.5" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="166.9" y1="69.5" x2="217.1" y2="106.5" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="40" cy="172" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="40.0" y="172.0" text-anchor="middle" dominant-baseline="central" font-size="13">1</text>
+<circle class="s-ink f-paper" cx="78" cy="116" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="78.0" y="116.0" text-anchor="middle" dominant-baseline="central" font-size="13">2</text>
+<circle class="s-ink f-paper" cx="116" cy="172" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="116.0" y="172.0" text-anchor="middle" dominant-baseline="central" font-size="13">3</text>
+<circle class="s-ink f-paper" cx="154" cy="60" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="154.0" y="60.0" text-anchor="middle" dominant-baseline="central" font-size="13">4</text>
+<circle class="s-ink f-paper" cx="192" cy="172" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="192.0" y="172.0" text-anchor="middle" dominant-baseline="central" font-size="13">5</text>
+<circle class="s-ink f-paper" cx="230" cy="116" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="230.0" y="116.0" text-anchor="middle" dominant-baseline="central" font-size="13">6</text>
+<circle class="s-ink f-paper" cx="268" cy="172" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="268.0" y="172.0" text-anchor="middle" dominant-baseline="central" font-size="13">7</text>
+<text class="t-ink b" x="154.0" y="20.0" text-anchor="middle" dominant-baseline="central" font-size="12">inserted as 4, 2, 6, 1, 3, 5, 7</text>
+<text class="t-good" x="154.0" y="200.0" text-anchor="middle" dominant-baseline="central" font-size="12">height 3</text>
+<line class="s-ink f-none" x1="549.6" y1="203.8" x2="564.4" y2="217.2" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="515.6" y1="172.8" x2="530.4" y2="186.2" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="481.6" y1="141.8" x2="496.4" y2="155.2" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="447.6" y1="110.8" x2="462.4" y2="124.2" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="413.6" y1="79.8" x2="428.4" y2="93.2" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="379.6" y1="48.8" x2="394.4" y2="62.2" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="370" cy="40" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="370.0" y="40.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<circle class="s-ink f-paper" cx="404" cy="71" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="404.0" y="71.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<circle class="s-ink f-paper" cx="438" cy="102" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="438.0" y="102.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<circle class="s-ink f-paper" cx="472" cy="133" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="472.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<circle class="s-ink f-paper" cx="506" cy="164" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="506.0" y="164.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<circle class="s-ink f-paper" cx="540" cy="195" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="540.0" y="195.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<circle class="s-ink f-paper" cx="574" cy="226" r="13" stroke-width="1.3"/>
+<text class="t-ink mono" x="574.0" y="226.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<text class="t-ink b" x="430.0" y="20.0" text-anchor="middle" dominant-baseline="central" font-size="12">inserted as 1, 2, 3, 4, 5, 6, 7</text>
+<text class="t-bad" x="430.0" y="200.0" text-anchor="middle" dominant-baseline="central" font-size="12">height 7</text>
+<line class="s-muted f-none dash" x1="320.0" y1="10.0" x2="320.0" y2="250.0" stroke-width="1.3"/>
+</svg><figcaption>
+<span class="fignum">Figure 6.4</span> The same seven keys in two binary search trees. Both satisfy the invariant. Inserted in the order 4, 2, 6, 1, 3, 5, 7, they form a tree of height 3. Inserted in increasing order, they form a chain of height 7, and every operation is a linear scan.
+</figcaption></figure>
+<p>Sorted input is the worst case, and sorted input is extremely common. Data arrives in order all the time: records with increasing ID numbers, timestamps, the contents of a file that someone already sorted. A data structure that collapses on its most likely input is in trouble.</p>
+<p>What about input in no particular order? Here are measurements for trees built by inserting the numbers 0 through <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n - 1</annotation></semantics></math> in random order.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math></th>
+<th style="text-align: right;">height</th>
+<th style="text-align: right;">average depth of a node</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1,000</td>
+<td style="text-align: right;">10.0</td>
+<td style="text-align: right;">26</td>
+<td style="text-align: right;">11.2</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">13.3</td>
+<td style="text-align: right;">28</td>
+<td style="text-align: right;">15.3</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">100,000</td>
+<td style="text-align: right;">16.6</td>
+<td style="text-align: right;">42</td>
+<td style="text-align: right;">21.4</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">1,000,000</td>
+<td style="text-align: right;">19.9</td>
+<td style="text-align: right;">53</td>
+<td style="text-align: right;">24.8</td>
+</tr>
+</tbody>
+</table>
+<p>Random insertion order produces trees that are not perfectly balanced but are <em>good enough</em>. The average node is at a depth of roughly <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1.39</mn><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">1.39 \log_2 n</annotation></semantics></math>, less a small constant, so a typical search costs only about forty percent more comparisons than the ideal <span class="citation" data-cites="knuth1998">(<a href="#ref-knuth1998" role="doc-biblioref">Knuth 1998</a>)</span>. The height, too, grows in proportion to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">\log n</annotation></semantics></math>. The same code built from sorted keys:</p>
+<pre class="console"><code>sorted: n = 1000   height = 1000   avg depth = 499.5
+sorted: n = 10000   height = 10000   avg depth = 4999.5</code></pre>
+<p>We are in the same position as with hash tables. The structure is excellent on average and terrible in the worst case, and the worst case is not exotic. For hash tables the remedy was to make the hash function unpredictable. For trees there is a better one: change the algorithms so that the tree <em>cannot</em> become tall, whatever order the keys arrive in. That is the subject of <a href="07-balance.html">Chapter 7</a>.</p>
+<section id="sec:isbst" class="level3 unnumbered">
+<h3 class="unnumbered">Checking the invariant</h3>
+<p>How do you know a tree satisfies the binary-search-tree invariant? The obvious check goes like this.</p>
+<div class="listing"><div class="listing-file">code/ch06/isbst.cpp</div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co">// WRONG: checks each node only against its own two children.</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> looks_ordered<span class="op">(</span><span class="at">const</span> Node<span class="op">*</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n<span class="op">-&gt;</span>left <span class="op">&amp;&amp;</span> <span class="op">!(</span>n<span class="op">-&gt;</span>left<span class="op">-&gt;</span>key <span class="op">&lt;</span> n<span class="op">-&gt;</span>key<span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n<span class="op">-&gt;</span>right <span class="op">&amp;&amp;</span> <span class="op">!(</span>n<span class="op">-&gt;</span>key <span class="op">&lt;</span> n<span class="op">-&gt;</span>right<span class="op">-&gt;</span>key<span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> looks_ordered<span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">)</span> <span class="op">&amp;&amp;</span> looks_ordered<span class="op">(</span>n<span class="op">-&gt;</span>right<span class="op">);</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>It verifies that every node’s left child is smaller than it and its right child larger. It is also wrong, and it is one of the best-known wrong answers in the subject.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 6.5</span></p>
+<p>Find a binary tree with five nodes that <code>looks_ordered</code> accepts but that is <em>not</em> a binary search tree. (Hint: put a key in the left subtree of the root that is larger than the root.)</p>
+<details class="answer"><summary>Answer</summary>
+<p>Make 50 the root with children 30 and 70, and give 30 the children 20 and 60. Every parent–child pair is in order: 60 is greater than its parent 30. But 60 is in the left subtree of 50, where every key must be less than 50. A search for 60 would go right at the root and never find it.</p>
+</details>
+</aside>
+<p>The invariant is about whole subtrees. A key must be on the correct side of <em>every one of its ancestors</em>, not only its parent. The correct check carries that information down the tree as a pair of bounds.</p>
+<div class="listing"><div class="listing-file">code/ch06/bst.hpp</div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Is every key in n&#39;s subtree strictly between *lo and *hi?</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="co">// (A null bound means &quot;no limit on that side&quot;.)</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">bool</span> ordered<span class="op">(</span><span class="at">const</span> Node<span class="op">*</span> n<span class="op">,</span> <span class="at">const</span> K<span class="op">*</span> lo<span class="op">,</span> <span class="at">const</span> K<span class="op">*</span> hi<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>lo <span class="op">!=</span> <span class="kw">nullptr</span> <span class="op">&amp;&amp;</span> <span class="op">!(*</span>lo <span class="op">&lt;</span> n<span class="op">-&gt;</span>key<span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>hi <span class="op">!=</span> <span class="kw">nullptr</span> <span class="op">&amp;&amp;</span> <span class="op">!(</span>n<span class="op">-&gt;</span>key <span class="op">&lt;</span> <span class="op">*</span>hi<span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ordered<span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">(),</span> lo<span class="op">,</span> <span class="op">&amp;</span>n<span class="op">-&gt;</span>key<span class="op">)</span> <span class="op">&amp;&amp;</span>     <span class="co">// left: below this key</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>           ordered<span class="op">(</span>n<span class="op">-&gt;</span>right<span class="op">.</span>get<span class="op">(),</span> <span class="op">&amp;</span>n<span class="op">-&gt;</span>key<span class="op">,</span> hi<span class="op">);</span>      <span class="co">// right: above it</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Going left tightens the upper bound to the current key; going right tightens the lower bound. Every node is checked against limits inherited from all the ancestors above it.</p>
+<p>Our <code>check_invariant</code> uses this function, and the test for this chapter runs it throughout a differential test against <code>std::set</code>, the standard library’s ordered set, comparing <code>contains</code>, <code>lower_bound</code>, sizes, and the complete in-order sequence of keys.</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>The parent-and-children check is so common in tutorials and forum answers that it makes a good probe of any source’s reliability, human or machine. Try both directions.</p>
+<p>First, hand a model the wrong function, without comment:</p>
+<blockquote>
+<p>Is this function a correct check of the binary search tree property? If not, give the smallest counterexample tree.</p>
+</blockquote>
+<p>Then, in a fresh conversation, ask it to <em>write</em> such a check from scratch, and read what it produces. Does it carry bounds down, or compare each node only with its children?</p>
+<p>Find the counterexample yourself before you ask. The point of the exercise is not that the model gets it wrong (a good one will probably get it right) but that you now know a precise, checkable fact that a plausible-looking answer can violate, and you know how to test for it.</p>
+</aside>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>The search trees in this chapter are a small corner of the tree kingdom. A file system is a tree of directories. A web page is a tree of nested elements, and so is any JSON or XML document. A compiler turns your program into a tree, in which <code>a + b * c</code> is an addition node whose right child is a multiplication, and then traverses that tree, post-order, to generate code. In all of these, the recursive definition and the recursive traversals carry over directly, and <code>std::unique_ptr</code> children are the standard way to represent them in modern C++.</p>
+</aside>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">Binary search tree</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+One heap node per key, each owning its left and right subtrees through <code>unique_ptr</code>s. The tree object owns the root. Nodes are scattered in memory, as with a linked list.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+For every node, all keys in its left subtree are smaller and all keys in its right subtree are larger. Consequently an in-order traversal yields the keys in sorted order. Nothing is promised about the tree’s shape.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Search, insert, remove, minimum, lower bound: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(h)</annotation></semantics></math>, where the height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> is between <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>. About <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1.39</mn><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">1.39 \log_2 n</annotation></semantics></math> on average for keys inserted in random order; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> for keys inserted in sorted order. Traversal: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+A recursive invariant check that passes bounds down from every ancestor; differential testing against <code>std::set</code>, including the in-order key sequence; tests that deliberately insert sorted keys.
+</dd>
+</dl>
+</aside>
+</section>
+</section>
+<section id="sec:trees-ex" class="level2 unnumbered">
+<h2 class="unnumbered">Exercises</h2>
+<ol type="1">
+<li><p>Write a recursive function <code>int count_digits(unsigned n)</code> that returns the number of decimal digits in <code>n</code>. Identify the base case and the smaller subproblem. How many calls does it make for an input with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math> digits?</p></li>
+<li><p>Write a recursive function <code>bool is_palindrome(const std::string&amp; s, std::size_t lo, std::size_t hi)</code> that reports whether the characters of <code>s</code> in the range <code>[lo, hi)</code> read the same in both directions.</p></li>
+<li><p>Write binary search recursively: <code>std::size_t search(const std::vector&lt;int&gt;&amp; v, int target, std::size_t lo, std::size_t hi)</code>. What is its stack depth? Is there any advantage over the loop of <a href="02-cost.html">Chapter 2</a>?</p></li>
+<li><p>Draw the call tree for <code>fib(5)</code>. How many calls are there? How many of them are calls to <code>fib(1)</code>? Then write a version of <code>fib</code> that runs in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> time using a loop.</p></li>
+<li><p>Draw the binary search tree that results from inserting these keys, in order, into an empty tree: 40, 20, 60, 10, 30, 50, 70, 25, 35, 65. Give its height, and list the keys in pre-order, in-order, post-order, and level-order.</p></li>
+<li><p>Starting from the tree in the previous exercise, draw the tree after each of these removals, performed one after another: 10, 60, 20, 40.</p></li>
+<li><p>Give an insertion order for the keys 1 through 15 that produces a tree of height 4. How many different insertion orders of the keys 1, 2, 3 produce a tree of height 2? Of height 3?</p></li>
+<li><p>Add these member functions to <code>Bst&lt;K&gt;</code>: (a) <code>const K* max() const</code>; (b) <code>std::size_t count_leaves() const</code>; (c) <code>const K* floor(const K&amp; key) const</code>, the largest key less than or equal to <code>key</code>; (d) <code>std::size_t count_in_range(const K&amp; lo, const K&amp; hi) const</code>, which should not visit subtrees that cannot contain keys in the range.</p></li>
+<li><p>A pre-order listing of a binary search tree is enough to reconstruct it exactly. Explain why, and reconstruct the tree with pre-order 50, 30, 20, 40, 35, 70, 60, 80. Is an in-order listing enough? Is a post-order listing?</p></li>
+<li><p>Write a member function <code>Bst&lt;K&gt; clone() const</code> that returns a deep copy of the tree with exactly the same shape. Which traversal order does your helper function use, and why?</p></li>
+<li><p>Write a non-recursive in-order traversal using an explicit <code>std::stack&lt;const Node*&gt;</code>. Compare its structure with <code>level_order</code>. What changes when the queue becomes a stack?</p></li>
+<li><p><code>Bst::erase</code> always uses the successor in the two-child case. Suppose you insert <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> random keys and then repeatedly remove a random key and insert a new random key, many times. Predict what happens to the tree’s balance, then measure the average depth after <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>n</mi><mn>2</mn></msup><annotation encoding="application/x-tex">n^2</annotation></semantics></math> such pairs for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>1000</mn></mrow><annotation encoding="application/x-tex">n = 1000</annotation></semantics></math>. (The answer surprised the researchers who first ran this experiment.)</p></li>
+<li><p><strong>With a model, as critic.</strong> Write the three-case removal for a BST that uses <em>raw</em> pointers (<code>Node* left; Node* right;</code>) and an explicit <code>delete</code>. Run it under AddressSanitizer on your own tests. Then ask a model: “Without rewriting it, tell me whether any path through this function leaks a node, deletes a node twice, or leaves a dangling pointer.” Compare its findings with the sanitizer’s. Then write two sentences on what <code>unique_ptr</code> saved you from.</p></li>
+<li><p><strong>Lab.</strong> Turn <code>Bst&lt;K&gt;</code> into <code>BstMap&lt;K, V&gt;</code>, a map from keys to values, with <code>put</code>, <code>find</code> (returning a pointer to the value or null), <code>erase</code>, and an in-order <code>for_each</code>. Use it to rewrite the word-frequency program of <a href="05-hashing.html">Chapter 5</a> so that it prints <em>every</em> word and its count in alphabetical order. Then feed it two inputs, a novel from Project Gutenberg and the first 10,000 lines of the system dictionary file (which is sorted), and report the height of the tree and the running time for each. Explain the difference. (Why only the first 10,000 lines? Try the whole file, under the sanitizers, and explain what happens.)</p></li>
+</ol>
+</section>
+<section id="sec:trees-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Chapter notes</h2>
+<p>Binary search trees were discovered independently by several people around 1960, and the removal algorithm given here is due to Hibbard; Knuth <span class="citation" data-cites="knuth1998">(<a href="#ref-knuth1998" role="doc-biblioref">Knuth 1998</a>)</span> gives the history and the analysis of random trees, including the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1.39</mn><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">1.39 \log_2 n</annotation></semantics></math> average depth and the unexpected long-run effect of removals that Exercise 12 explores. Sedgewick and Wayne <span class="citation" data-cites="sedgewick2011">(<a href="#ref-sedgewick2011" role="doc-biblioref">Sedgewick and Wayne 2011</a>)</span> give an especially clear treatment of ordered operations such as floor, ceiling, and range counting.</p>
+<p>On recursion as a way of thinking, and on trees as recursive data, the classic source remains <em>Structure and Interpretation of Computer Programs</em> <span class="citation" data-cites="abelson1996">(<a href="#ref-abelson1996" role="doc-biblioref">Abelson, Sussman, and Sussman 1996</a>)</span>. For <code>std::unique_ptr</code> and the idea of expressing ownership in types, see Meyers <span class="citation" data-cites="meyers2014">(<a href="#ref-meyers2014" role="doc-biblioref">Meyers 2014</a>)</span> and the C++ Core Guidelines <span class="citation" data-cites="coreguidelines">(<a href="#ref-coreguidelines" role="doc-biblioref">Stroustrup and Sutter 2026</a>)</span>.</p>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-abelson1996" class="csl-entry" role="listitem">
+Abelson, Harold, Gerald Jay Sussman, and Julie Sussman. 1996. <em>Structure and Interpretation of Computer Programs</em>. 2nd ed. MIT Press.
+</div>
+<div id="ref-knuth1998" class="csl-entry" role="listitem">
+Knuth, Donald E. 1998. <em>The Art of Computer Programming, Volume 3: Sorting and Searching</em>. 2nd ed. Addison-Wesley.
+</div>
+<div id="ref-meyers2014" class="csl-entry" role="listitem">
+Meyers, Scott. 2014. <em>Effective Modern <span>C++</span></em>. O’Reilly Media.
+</div>
+<div id="ref-sedgewick2011" class="csl-entry" role="listitem">
+Sedgewick, Robert, and Kevin Wayne. 2011. <em>Algorithms</em>. 4th ed. Addison-Wesley.
+</div>
+<div id="ref-coreguidelines" class="csl-entry" role="listitem">
+Stroustrup, Bjarne, and Herb Sutter. 2026. <span>“<span>C++</span> Core Guidelines.”</span> <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines">https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines</a>.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="05-hashing.html"><span>← Previous</span>Hashing</a>
+<a class="next" href="07-balance.html"><span>Next →</span>Balance</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+<script src="assets/viz/core.js"></script>
+<script src="assets/viz/bst.js"></script>
+<script>Viz.mountAll();</script>
+</body>
+</html>

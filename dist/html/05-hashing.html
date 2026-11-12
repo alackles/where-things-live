@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hashing · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-chapter">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Chapter 5: Hashing</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class="current"><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+<ol class="secs">
+<li><a href="#sec:hash-idea"><span class="n">5.1</span> From keys to indices</a></li>
+<li><a href="#sec:chaining"><span class="n">5.2</span> Separate chaining</a></li>
+<li><a href="#sec:probing"><span class="n">5.3</span> Open addressing</a></li>
+<li><a href="#sec:using-hash"><span class="n">5.4</span> Using hash tables well</a></li>
+<li><a href="#sec:bloom"><span class="n">5.5</span> Bloom filters</a></li>
+<li><a href="#sec:hashing-ex">Exercises</a></li>
+<li><a href="#sec:hashing-notes">Chapter notes</a></li>
+</ol>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:hashing">
+<p class="kicker">
+Chapter 5 · Week 5
+</p>
+<h1>
+Hashing
+</h1>
+</header>
+<aside class="callout goals"><p class="callout-title"><span class="lab">This week</span></p>
+<p>By the end of this week you should be able to:</p>
+<ul>
+<li>explain how a hash table turns a key into an array index, and why collisions are unavoidable;</li>
+<li>say what makes a hash function good, and recognize a bad one;</li>
+<li>implement a hash table with separate chaining and one with linear probing, including growth and deletion;</li>
+<li>define the load factor and use it to state the expected cost of each operation, and the worst case;</li>
+<li>use <code>std::unordered_map</code> and <code>std::unordered_set</code> fluently, with your own key types;</li>
+<li>explain what a Bloom filter is for, and what it gives up to achieve it.</li>
+</ul>
+</aside>
+<p>You have a million names and need to answer, over and over, the question “is this name on the list?” So far the best tool we have is a sorted vector with binary search: about twenty comparisons per question, and painfully slow insertion.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 5.1</span></p>
+<p>Could a lookup take one or two steps, <em>no matter how many names there are</em>? Not twenty: one or two. What would have to be true for that to be possible? Think about the one operation from <a href="01-memory.html">Chapter 1</a> that takes constant time regardless of size.</p>
+<details class="answer"><summary>Answer</summary>
+<p>Indexing an array takes constant time. So if we could compute, from the name itself, the array index where that name is stored, we would not have to search at all: compute the index, look there. The whole of this chapter is about making that idea work.</p>
+</details>
+</aside>
+<p>The structure that results, the <strong>hash table</strong>, is the workhorse of modern software. It is behind Python’s <code>dict</code> and <code>set</code>, JavaScript’s objects, Java’s <code>HashMap</code>, the symbol tables in compilers, database indexes, caches, and routers. After the array it is probably the most-used data structure there is. Many textbooks place it after several weeks of trees; this one puts it first, because it is more important in practice and needs nothing you do not already have: an array, a little arithmetic, and the linked chains or the modular wraparound of last week.</p>
+<section id="sec:hash-idea" class="level2">
+<h2><span class="secnum">5.1</span> From keys to indices</h2>
+<p>Two abstract data types run through the rest of the book.</p>
+<p>A <strong>set</strong> stores a collection of distinct <em>keys</em> and answers membership questions: insert a key, remove a key, is this key present?</p>
+<p>A <strong>map</strong> (also called a dictionary or associative array) stores <em>key–value pairs</em> and looks up the value belonging to a key: a word and its definition, a student ID and a transcript, a variable name and its type. A set is a map with nothing in the value slot, so we will mostly talk about maps.</p>
+<p>If the keys happen to be small whole numbers, there is a wonderful implementation: use the key as an array index. To count how many times each byte value occurs in a file, make an array of 256 counters and, for each byte <code>b</code>, increment <code>count[b]</code>. Insert, look up, and remove are single array accesses. This is called <strong>direct addressing</strong>, and when it applies, nothing beats it.</p>
+<p>It rarely applies. Keys are usually strings, or large numbers, or structs, and the set of <em>possible</em> keys is astronomically larger than the set of keys actually in use. There are thousands of times more possible twenty-letter names than there are stars in the observable universe. We cannot have an array slot for each.</p>
+<p>Hashing rescues the idea in two steps.</p>
+<ol type="1">
+<li>A <strong>hash function</strong> converts a key of any type into a large integer, the key’s <em>hash value</em>. For a 64-bit hash that is a number between 0 and about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1.8</mn><mo>×</mo><msup><mn>10</mn><mn>19</mn></msup></mrow><annotation encoding="application/x-tex">1.8 \times 10^{19}</annotation></semantics></math>.</li>
+<li>The hash value is reduced to an index into an array of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> slots, called <strong>buckets</strong>, most simply by taking the remainder: <code>index = hash % m</code>.</li>
+</ol>
+<p>To store a pair, compute its key’s bucket and put it there. To look up a key, compute its bucket and look there. Neither step involves searching, and neither depends on how many keys the table holds.</p>
+<section id="sec:hash-functions" class="level3 unnumbered">
+<h3 class="unnumbered">What makes a hash function good</h3>
+<p>A hash function must be <strong>deterministic</strong>: the same key must always produce the same hash value, or we would never find anything again. It follows that keys which compare equal must hash equal. It should be <strong>fast</strong>, since it runs on every operation. And it should <strong>spread the keys out</strong>: the hash values of the keys in use should look as though they were chosen at random, with every bucket equally likely, no matter what patterns the keys themselves contain.</p>
+<p>The last requirement is the hard one, and getting it wrong is easy. Here is a hash function for strings that many people invent on their first try.</p>
+<div class="listing"><div class="listing-file">code/ch05/hash.hpp</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// A poor hash: add up the character codes. Anagrams collide, and the</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// results for short strings are all crowded into a small range.</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> <span class="bu">std::</span>uint64_t sum_hash<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>uint64_t h <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">unsigned</span> <span class="dt">char</span> c <span class="op">:</span> s<span class="op">)</span> h <span class="op">+=</span> c<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> h<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>And here is one that is used in practice, known as FNV-1a after its inventors Fowler, Noll, and Vo.</p>
+<div class="listing"><div class="listing-file">code/ch05/hash.hpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// FNV-1a: fold each byte into the running value, then multiply by a</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co">// large prime, which spreads that byte&#39;s influence into the higher bits.</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> <span class="bu">std::</span>uint64_t fnv1a<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>uint64_t h <span class="op">=</span> <span class="dv">14695981039346656037</span><span class="bu">ull</span><span class="op">;</span>   <span class="co">// &quot;offset basis&quot;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">unsigned</span> <span class="dt">char</span> c <span class="op">:</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        h <span class="op">^=</span> c<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        h <span class="op">*=</span> <span class="dv">1099511628211</span><span class="bu">ull</span><span class="op">;</span>                   <span class="co">// the FNV prime</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> h<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>They look similar: both walk the string and fold each character into a running value. The difference is that FNV-1a multiplies by a large prime after each character, which spreads every character’s influence upward across the higher bits of the result, and makes the order of the characters matter.</p>
+<p>To see what the difference means, hash the 10,000 strings <code>user0</code> through <code>user9999</code> into a table of 16,384 buckets with each function.</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Hash function</th>
+<th style="text-align: right;">Buckets used</th>
+<th style="text-align: right;">Longest chain of colliding keys</th>
+<th style="text-align: right;">Average comparisons to find a key</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>sum_hash</code></td>
+<td style="text-align: right;">91</td>
+<td style="text-align: right;">615</td>
+<td style="text-align: right;">203</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>fnv1a</code></td>
+<td style="text-align: right;">8,072</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">1.2</td>
+</tr>
+</tbody>
+</table>
+<p>With <code>sum_hash</code>, ten thousand keys land in just 91 of the sixteen thousand buckets. The sum of the character codes of a short string is a small number, and similar strings have similar sums; <code>user19</code> and <code>user91</code> have the <em>same</em> sum. The table has degenerated into a few long lists. With FNV-1a the keys spread over about half the buckets, which is what randomly thrown keys would do, and almost every lookup finds its key at once.</p>
+<p>For integer keys the temptation is to use the integer itself as its hash. Sometimes that is fine. But if the keys follow a pattern, say they are all multiples of 1024, and the table size is a power of two, they will all land in a handful of buckets. A good table therefore scrambles integer hashes first.</p>
+<div class="listing"><div class="listing-file">code/ch05/hash.hpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Scrambles the bits of an integer, so that keys which differ only in</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co">// their high bits, or follow a regular pattern, still spread out.</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">// (This is the finalizer of the SplitMix64 generator.)</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> <span class="bu">std::</span>uint64_t mix<span class="op">(</span><span class="bu">std::</span>uint64_t x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    x <span class="op">^=</span> x <span class="op">&gt;&gt;</span> <span class="dv">30</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    x <span class="op">*=</span> <span class="bn">0xbf58476d1ce4e5b9</span><span class="bu">ull</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    x <span class="op">^=</span> x <span class="op">&gt;&gt;</span> <span class="dv">27</span><span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    x <span class="op">*=</span> <span class="bn">0x94d049bb133111eb</span><span class="bu">ull</span><span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    x <span class="op">^=</span> x <span class="op">&gt;&gt;</span> <span class="dv">31</span><span class="op">;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x<span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>Do not invent hash functions. Designing one that spreads real-world keys well is a specialty, and plausible-looking homemade functions like <code>sum_hash</code> fail in ways that are invisible until the table is under load. Use the standard library’s <code>std::hash</code>, or a published function with a name. And if you ask a model for one, <strong>check its constants against an authoritative source</strong>: the two long numbers in <code>fnv1a</code> above are part of the definition, and a model reproducing them from memory can get a digit wrong while the surrounding code looks impeccable. A hash function with a wrong constant still compiles and still returns numbers. It just quietly does its job worse.</p>
+</aside>
+</section>
+<section id="sec:collisions" class="level3 unnumbered">
+<h3 class="unnumbered">Collisions are certain</h3>
+<p>However good the hash function, two different keys will sometimes land in the same bucket. This is a <strong>collision</strong>. If there are more possible keys than buckets, some bucket must receive more than one; that much is the pigeonhole principle. What is surprising is how <em>soon</em> collisions begin.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 5.2</span></p>
+<p>A table has 365 buckets and a perfect hash function that sends each key to a uniformly random bucket. How many keys can you insert before a collision becomes more likely than not? Guess before you calculate.</p>
+<details class="answer"><summary>Answer</summary>
+<p>Twenty-three. This is the famous <em>birthday paradox</em>: in a group of 23 people, the chance that two share a birthday is just over one half. In general, collisions become likely once the number of keys reaches about the <em>square root</em> of the number of buckets. A table with a million buckets will probably see its first collision at around twelve hundred keys, when it is barely a tenth of one percent full.</p>
+</details>
+</aside>
+<p>So a hash table cannot be designed to avoid collisions. It must be designed to <em>handle</em> them, and the two major families of hash table differ in how. Both rest on the same quantity. If a table holds <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> entries in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> buckets, its <strong>load factor</strong> is</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mo>=</mo><mfrac><mi>n</mi><mi>m</mi></mfrac><mo>,</mo></mrow><annotation encoding="application/x-tex">\alpha = \frac{n}{m},</annotation></semantics></math></p>
+<p>the average number of entries per bucket. Keeping <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math> small keeps collisions rare, and costs memory. Everything about hash-table performance is a function of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math>.</p>
+</section>
+</section>
+<section id="sec:chaining" class="level2">
+<h2><span class="secnum">5.2</span> Separate chaining</h2>
+<p>The most direct way to handle collisions is to let each bucket hold more than one entry. In <strong>separate chaining</strong>, each bucket is a small collection, traditionally a linked list and hence a “chain,” of all the entries whose keys hash there.</p>
+<figure class="fig" id="fig:chaining"><svg class="figsvg" viewBox="0 0 640 236" width="640" height="236" role="img" aria-label="A bucket array of six buckets, each leading to a chain of entries." xmlns="http://www.w3.org/2000/svg">
+<text class="t-muted mono" x="240.0" y="36.0" text-anchor="end" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-ink f-muted-soft" x="250" y="22" width="44" height="28" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="272.0" cy="36.0" r="2.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="272.0" y1="36.0" x2="318.0" y2="36.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="324.0,36.0 315.0,32.4 315.0,39.6"/>
+<rect class="s-ink f-paper" x="328" y="22" width="96" height="28" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="386.0" y1="22.0" x2="386.0" y2="50.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="357.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="13">dog</text>
+<text class="t-ink mono" x="405.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="13">3</text>
+<text class="t-muted mono" x="240.0" y="70.0" text-anchor="end" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-ink f-muted-soft" x="250" y="56" width="44" height="28" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="240.0" y="104.0" text-anchor="end" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-accent-soft" x="250" y="90" width="44" height="28" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="272.0" cy="104.0" r="2.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="272.0" y1="104.0" x2="318.0" y2="104.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="324.0,104.0 315.0,100.4 315.0,107.6"/>
+<rect class="s-ink f-paper" x="328" y="90" width="96" height="28" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="386.0" y1="90.0" x2="386.0" y2="118.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="357.0" y="104.0" text-anchor="middle" dominant-baseline="central" font-size="13">fox</text>
+<text class="t-ink mono" x="405.0" y="104.0" text-anchor="middle" dominant-baseline="central" font-size="13">7</text>
+<rect class="s-accent2 f-accent2-soft" x="424" y="90" width="96" height="28" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="482.0" y1="90.0" x2="482.0" y2="118.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="453.0" y="104.0" text-anchor="middle" dominant-baseline="central" font-size="13">cat</text>
+<text class="t-ink mono" x="501.0" y="104.0" text-anchor="middle" dominant-baseline="central" font-size="13">1</text>
+<text class="t-muted mono" x="240.0" y="138.0" text-anchor="end" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-muted-soft" x="250" y="124" width="44" height="28" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="272.0" cy="138.0" r="2.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="272.0" y1="138.0" x2="318.0" y2="138.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="324.0,138.0 315.0,134.4 315.0,141.6"/>
+<rect class="s-ink f-paper" x="328" y="124" width="96" height="28" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="386.0" y1="124.0" x2="386.0" y2="152.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="357.0" y="138.0" text-anchor="middle" dominant-baseline="central" font-size="13">owl</text>
+<text class="t-ink mono" x="405.0" y="138.0" text-anchor="middle" dominant-baseline="central" font-size="13">4</text>
+<text class="t-muted mono" x="240.0" y="172.0" text-anchor="end" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-muted-soft" x="250" y="158" width="44" height="28" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="240.0" y="206.0" text-anchor="end" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-muted-soft" x="250" y="192" width="44" height="28" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="272.0" cy="206.0" r="2.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="272.0" y1="206.0" x2="318.0" y2="206.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="324.0,206.0 315.0,202.4 315.0,209.6"/>
+<rect class="s-ink f-paper" x="328" y="192" width="96" height="28" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="386.0" y1="192.0" x2="386.0" y2="220.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="357.0" y="206.0" text-anchor="middle" dominant-baseline="central" font-size="13">bee</text>
+<text class="t-ink mono" x="405.0" y="206.0" text-anchor="middle" dominant-baseline="central" font-size="13">9</text>
+<text class="t-muted" x="272.0" y="232.0" text-anchor="middle" dominant-baseline="central" font-size="11">buckets</text>
+<text class="t-muted" x="424.0" y="232.0" text-anchor="middle" dominant-baseline="central" font-size="11">chains of (key, value) entries</text>
+<text class="t-ink mono b" x="24.0" y="72.0" text-anchor="start" dominant-baseline="central" font-size="13">find("cat")</text>
+<text class="t-accent mono" x="24.0" y="92.0" text-anchor="start" dominant-baseline="central" font-size="12">hash("cat") % 6</text>
+<text class="t-accent mono" x="24.0" y="110.0" text-anchor="start" dominant-baseline="central" font-size="12">= 2</text>
+<line class="s-accent f-none" x1="150.0" y1="104.0" x2="218.0" y2="104.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent" points="224.0,104.0 215.0,100.4 215.0,107.6"/>
+</svg><figcaption>
+<span class="fignum">Figure 5.1</span> Separate chaining. The array holds one chain per bucket. A key’s hash selects a bucket; the key is then searched for, or added, within that bucket’s short chain. Here <code>fox</code> and <code>cat</code> have collided in bucket 2.
+</figcaption></figure>
+<div class="listing"><div class="listing-file">code/ch05/chained_map.hpp</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Entry <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    K key<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    V value<span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co">// One chain per bucket. Each chain is a small vector of entries.</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>vector<span class="op">&lt;</span>Entry<span class="op">&gt;&gt;</span> <span class="va">buckets_</span><span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t <span class="va">size_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>   <span class="co">// total number of entries</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>Hash <span class="va">hash_</span><span class="op">;</span></span></code></pre></div>
+</div>
+<p>Our chains are small <code>std::vector</code>s instead of linked lists, for the reasons the last chapter gave: a few entries stored contiguously are cheaper to scan than a few nodes scattered in the heap. Since every member manages itself, the class follows the rule of zero.</p>
+<p>Finding a key’s bucket is one line.</p>
+<div class="listing"><div class="listing-file">code/ch05/chained_map.hpp</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t bucket_of<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="va">hash_</span><span class="op">(</span>key<span class="op">)</span> <span class="op">%</span> <span class="va">buckets_</span><span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The class takes its hash function as a template parameter, <code>Hash</code>, defaulting to the standard library’s <code>std::hash&lt;K&gt;</code>. A hash function in C++ is an object that can be called like a function; <code>hash_(key)</code> calls it.</p>
+<p>Lookup scans the one chain where the key must be, if it is anywhere.</p>
+<div class="listing"><div class="listing-file">code/ch05/chained_map.hpp</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Returns a pointer to the value stored under key, or nullptr.</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>V<span class="op">*</span> find<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>Entry<span class="op">&amp;</span> e <span class="op">:</span> <span class="va">buckets_</span><span class="op">[</span>bucket_of<span class="op">(</span>key<span class="op">)])</span> <span class="op">{</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>e<span class="op">.</span>key <span class="op">==</span> key<span class="op">)</span> <span class="cf">return</span> <span class="op">&amp;</span>e<span class="op">.</span>value<span class="op">;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p><code>find</code> returns a <em>pointer</em> to the value: the address of the value if the key is present, <code>nullptr</code> if it is not. This is a handy use for pointers, as a “reference that might not exist,” and it lets the caller both test for presence and reach the value with one lookup.</p>
+<div class="listing"><div class="listing-file">code/ch05/map_test.cpp</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>ChainedMap<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">,</span> <span class="dt">int</span><span class="op">&gt;</span> ages<span class="op">;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>ages<span class="op">.</span>put<span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">,</span> <span class="dv">36</span><span class="op">);</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>ages<span class="op">.</span>put<span class="op">(</span><span class="st">&quot;Grace&quot;</span><span class="op">,</span> <span class="dv">85</span><span class="op">);</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>ages<span class="op">.</span>put<span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">,</span> <span class="dv">37</span><span class="op">);</span>                  <span class="co">// replaces the earlier value</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span><span class="dt">int</span><span class="op">*</span> a <span class="op">=</span> ages<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">))</span> <span class="op">{</span>      <span class="co">// found: a points at the value</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>a <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>ages<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;Alan&quot;</span><span class="op">)</span> <span class="op">==</span> <span class="kw">nullptr</span><span class="op">);</span> <span class="co">// not found</span></span></code></pre></div>
+</div>
+<p>Insertion looks for the key first, since a map holds at most one value per key.</p>
+<div class="listing"><div class="listing-file">code/ch05/chained_map.hpp</div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Associates value with key, replacing any previous value.</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> put<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">,</span> V value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>V<span class="op">*</span> existing <span class="op">=</span> find<span class="op">(</span>key<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>        <span class="op">*</span>existing <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">);</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="va">size_</span> <span class="op">+</span> <span class="dv">1</span> <span class="op">&gt;</span> <span class="va">buckets_</span><span class="op">.</span>size<span class="op">())</span> rehash<span class="op">(</span><span class="dv">2</span> <span class="op">*</span> <span class="va">buckets_</span><span class="op">.</span>size<span class="op">());</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="va">buckets_</span><span class="op">[</span>bucket_of<span class="op">(</span>key<span class="op">)].</span>push_back<span class="op">(</span>Entry<span class="op">{</span>key<span class="op">,</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">)});</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Removal finds the entry in its chain and deletes it. Order within a chain means nothing, so instead of shifting the chain’s later entries down, we overwrite the doomed entry with the last one and shrink the chain by one: a constant-time removal from the middle of a vector, and a trick worth remembering.</p>
+<div class="listing"><div class="listing-file">code/ch05/chained_map.hpp</div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> erase<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span>Entry<span class="op">&gt;&amp;</span> chain <span class="op">=</span> <span class="va">buckets_</span><span class="op">[</span>bucket_of<span class="op">(</span>key<span class="op">)];</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> chain<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>chain<span class="op">[</span>i<span class="op">].</span>key <span class="op">==</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>            chain<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>chain<span class="op">.</span>back<span class="op">());</span>   <span class="co">// order within a chain</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>            chain<span class="op">.</span>pop_back<span class="op">();</span>                     <span class="co">// does not matter</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>            <span class="op">--</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<section id="sec:rehash" class="level3 unnumbered">
+<h3 class="unnumbered">Growing</h3>
+<p>If the number of buckets were fixed, the chains would lengthen as entries were added, and the table would slow to a crawl. So, like a vector, a hash table grows. When an insertion would push the load factor above a threshold (here 1.0), <code>put</code> calls <code>rehash</code> to move everything into a table with twice as many buckets.</p>
+<div class="listing"><div class="listing-file">code/ch05/chained_map.hpp</div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Move every entry into a table with new_count buckets.</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> rehash<span class="op">(</span><span class="bu">std::</span>size_t new_count<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>vector<span class="op">&lt;</span>Entry<span class="op">&gt;&gt;</span> old <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span><span class="va">buckets_</span><span class="op">);</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="va">buckets_</span><span class="op">.</span>assign<span class="op">(</span>new_count<span class="op">,</span> <span class="op">{});</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span><span class="op">&amp;</span> chain <span class="op">:</span> old<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span>Entry<span class="op">&amp;</span> e <span class="op">:</span> chain<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>            <span class="va">buckets_</span><span class="op">[</span>bucket_of<span class="op">(</span>e<span class="op">.</span>key<span class="op">)].</span>push_back<span class="op">(</span><span class="bu">std::</span>move<span class="op">(</span>e<span class="op">));</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Notice that entries cannot simply be copied to the same positions in the bigger table. A key’s bucket is <code>hash % m</code>, and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> has changed, so every entry must be assigned to its bucket afresh. Rehashing costs <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>. But because the table doubles, the argument from <a href="03-vector.html#sec:amortized">Section 3.2</a> applies without change: the cost averages out to a constant per insertion.</p>
+</section>
+<section id="sec:chaining-cost" class="level3 unnumbered">
+<h3 class="unnumbered">What it costs</h3>
+<p>Every operation computes a hash, which takes time proportional to the size of the key and is independent of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>, and then scans one chain. So everything depends on the length of the chains.</p>
+<p><em>If the hash function spreads keys uniformly</em>, the average chain has <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math> entries. An unsuccessful search scans a whole chain, about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math> comparisons. A successful one finds its key after passing, on average, half of the <em>other</em> entries in its chain: about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mi>α</mi><mi>/</mi><mn>2</mn></mrow><annotation encoding="application/x-tex">1 + \alpha/2</annotation></semantics></math> comparisons. With <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math> held below a constant by rehashing, every operation takes <strong>expected constant time</strong>: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>, independent of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>.</p>
+<p>The word “expected” is doing real work, and so is the “if.” In the <em>worst</em> case, every key lands in one bucket, the table is a single list, and every operation is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>. The table in the previous section showed a hash function getting a fair way toward that worst case with entirely innocent keys.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Expected</th>
+<th style="text-align: left;">Worst case</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">find, insert, erase</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">insert that triggers a rehash</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>, but amortized <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">visit every entry</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mi>m</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n + m)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mi>m</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n + m)</annotation></semantics></math></td>
+</tr>
+</tbody>
+</table>
+<p>This is a different kind of guarantee from any we have seen. A vector’s amortized bound was unconditional. A hash table’s constant time is a statement about averages, resting on the assumption that the hash function scatters the keys you actually have. Most of the time the assumption is sound and hash tables are spectacularly fast. <a href="#sec:using-hash">Section 5.4</a> looks at what happens when someone sets out to violate it on purpose.</p>
+</section>
+</section>
+<section id="sec:probing" class="level2">
+<h2><span class="secnum">5.3</span> Open addressing</h2>
+<p>Separate chaining stores entries outside the bucket array, in chains that each need their own allocation. The alternative is to store every entry <em>in the array itself</em>, at most one per slot. When a key’s slot is already taken, we look for another slot according to a fixed rule. This is <strong>open addressing</strong>, and the sequence of slots examined is called the <strong>probe sequence</strong>.</p>
+<p>The simplest rule is <strong>linear probing</strong>: if the slot is taken, try the next one, and the next, wrapping around at the end of the array, until an empty slot turns up.</p>
+<div class="listing"><div class="listing-file">code/ch05/probing_map.hpp</div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">enum</span> <span class="kw">class</span> State <span class="op">:</span> <span class="dt">unsigned</span> <span class="dt">char</span> <span class="op">{</span> Empty<span class="op">,</span> Full<span class="op">,</span> Deleted <span class="op">};</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Slot <span class="op">{</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    K key<span class="op">{};</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    V value<span class="op">{};</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    State state <span class="op">=</span> State<span class="op">::</span>Empty<span class="op">;</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span>Slot<span class="op">&gt;</span> <span class="va">slots_</span><span class="op">;</span>   <span class="co">// capacity is always a power of two</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t <span class="va">size_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>      <span class="co">// slots that are Full</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t <span class="va">used_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>      <span class="co">// slots that are Full or Deleted</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>Hash <span class="va">hash_</span><span class="op">;</span></span></code></pre></div>
+</div>
+<p>Each slot records whether it is empty, full, or (a third state we will need shortly) deleted. The slot where a key would live if nothing were in its way is its <em>home</em>.</p>
+<div class="listing"><div class="listing-file">code/ch05/probing_map.hpp</div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// The slot where key &quot;wants&quot; to live. The capacity is a power of two,</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co">// so (capacity - 1) is a mask of low bits; mix() makes sure those low</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="co">// bits depend on the whole hash value.</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t home<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> mix<span class="op">(</span><span class="va">hash_</span><span class="op">(</span>key<span class="op">))</span> <span class="op">&amp;</span> <span class="op">(</span><span class="va">slots_</span><span class="op">.</span>size<span class="op">()</span> <span class="op">-</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Keeping the capacity a power of two lets us replace the <code>%</code> operator, which is a slow division, with a bitwise AND against <code>capacity - 1</code>, which keeps just the low bits. The same trick wraps the index around the end of the array. The catch is that only the low bits of the hash are used, so they had better be well scrambled; that is why <code>home</code> passes the hash through <code>mix</code> first.</p>
+<p>To insert a key, start at its home and walk forward to the first slot that is not full. To find a key, start at its home and walk forward, comparing keys, until you find it or reach an <strong>empty</strong> slot.</p>
+<div class="listing"><div class="listing-file">code/ch05/probing_map.hpp</div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>V<span class="op">*</span> find<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t i <span class="op">=</span> home<span class="op">(</span>key<span class="op">);</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>state <span class="op">!=</span> State<span class="op">::</span>Empty<span class="op">)</span> <span class="op">{</span>      <span class="co">// an Empty slot ends</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>state <span class="op">==</span> State<span class="op">::</span>Full <span class="op">&amp;&amp;</span> <span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>key <span class="op">==</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="op">&amp;</span><span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>value<span class="op">;</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>        i <span class="op">=</span> <span class="op">(</span>i <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&amp;</span> <span class="op">(</span><span class="va">slots_</span><span class="op">.</span>size<span class="op">()</span> <span class="op">-</span> <span class="dv">1</span><span class="op">);</span>          <span class="co">// next slot, wrapping</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The stopping rule is the heart of the method. If the key were in the table, it would have been placed in the first free slot at or after its home. So if the search reaches a slot that is empty, the key cannot be further on. <a href="#fig:hashtable">Figure 5.2</a> lets you try both kinds of table.</p>
+<figure class="fig viz" id="fig:hashtable"><div class="viz-widget" data-viz="hashtable"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 176" width="640" height="176" role="img" aria-label="A linear probing table of 12 slots; key 29 probes slots 5, 6, 7 and lands in 8." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-paper" x="44" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="67.0" y="103.0" text-anchor="middle" dominant-baseline="central" font-size="14">24</text>
+<text class="t-muted mono" x="67.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-ink f-none" x="90" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="113.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-ink f-muted-soft" x="136" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="159.0" y="103.0" text-anchor="middle" dominant-baseline="central" font-size="14">del</text>
+<text class="t-muted mono" x="159.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-none" x="182" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="205.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-none" x="228" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="251.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-accent-soft" x="274" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="297.0" y="103.0" text-anchor="middle" dominant-baseline="central" font-size="14">17</text>
+<text class="t-muted mono" x="297.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-accent-soft" x="320" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="343.0" y="103.0" text-anchor="middle" dominant-baseline="central" font-size="14">6</text>
+<text class="t-muted mono" x="343.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-accent-soft" x="366" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="389.0" y="103.0" text-anchor="middle" dominant-baseline="central" font-size="14">41</text>
+<text class="t-muted mono" x="389.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<rect class="s-ink f-accent2-soft" x="412" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="435.0" y="103.0" text-anchor="middle" dominant-baseline="central" font-size="14">29</text>
+<text class="t-muted mono" x="435.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">8</text>
+<rect class="s-ink f-none" x="458" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="481.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">9</text>
+<rect class="s-ink f-paper" x="504" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="527.0" y="103.0" text-anchor="middle" dominant-baseline="central" font-size="14">22</text>
+<text class="t-muted mono" x="527.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">10</text>
+<rect class="s-ink f-none" x="550" y="84" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="573.0" y="133.0" text-anchor="middle" dominant-baseline="central" font-size="11">11</text>
+<text class="t-accent mono b" x="297.0" y="20.0" text-anchor="middle" dominant-baseline="central" font-size="13">29 % 12 = 5</text>
+<line class="s-accent f-none" x1="297.0" y1="30.0" x2="297.0" y2="74.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent" points="297.0,80.0 300.6,71.0 293.4,71.0"/>
+<path class="s-accent2 f-none" d="M303.0,78.0 Q320.0,54.0 337.0,78.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="337.0,78.0 334.7,68.6 328.9,72.7"/>
+<path class="s-accent2 f-none" d="M349.0,78.0 Q366.0,54.0 383.0,78.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="383.0,78.0 380.7,68.6 374.9,72.7"/>
+<path class="s-accent2 f-none" d="M395.0,78.0 Q412.0,54.0 429.0,78.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="429.0,78.0 426.7,68.6 420.9,72.7"/>
+<text class="t-accent2" x="485.0" y="58.0" text-anchor="start" dominant-baseline="central" font-size="11">first free slot</text>
+<text class="t-muted i" x="159.0" y="146.0" text-anchor="middle" dominant-baseline="central" font-size="10">tombstone</text>
+<text class="t-accent i" x="343.0" y="146.0" text-anchor="middle" dominant-baseline="central" font-size="10">a cluster</text>
+<text class="t-muted" x="596.0" y="162.0" text-anchor="end" dominant-baseline="central" font-size="11">h(k) = k mod 12</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 5.2</span> Linear probing. The key 29 hashes to slot 5, which is occupied, as are 6 and 7; it is stored in slot 8, the first free slot after its home. A later search for 29 retraces the same path. In the web edition, insert, find, and erase keys in either a chained or a probing table, and watch the load factor and the probe counts.
+</figcaption></figure>
+<section id="sec:tombstones" class="level3 unnumbered">
+<h3 class="unnumbered">Deletion and tombstones</h3>
+<p>Removing an entry from a probing table is subtle, and it is a favorite source of bugs.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 5.3</span></p>
+<p>Keys A, B, and C all have home slot 3, and were inserted in that order, so they occupy slots 3, 4, and 5. Now B is erased by marking slot 4 <em>empty</em>. What happens on a subsequent search for C?</p>
+<details class="answer"><summary>Answer</summary>
+<p>The search starts at slot 3 (A, not a match), moves to slot 4, finds it empty, and stops, reporting that C is not in the table. But C is sitting in slot 5. Emptying slot 4 broke the path that leads to it. <a href="#fig:tombstone">Figure 5.3</a> shows the situation.</p>
+</details>
+</aside>
+<figure class="fig" id="fig:tombstone"><svg class="figsvg" viewBox="0 0 640 270" width="640" height="270" role="img" aria-label="Erasing from a probing table with and without a tombstone." xmlns="http://www.w3.org/2000/svg">
+<text class="t-ink b" x="234.0" y="38.0" text-anchor="end" dominant-baseline="central" font-size="12">A, B, C inserted</text>
+<text class="t-muted" x="234.0" y="54.0" text-anchor="end" dominant-baseline="central" font-size="10">all three have home slot 3</text>
+<rect class="s-ink f-none" x="250" y="26" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="275.0" y="73.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-accent-soft" x="300" y="26" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="325.0" y="44.0" text-anchor="middle" dominant-baseline="central" font-size="14">A</text>
+<text class="t-muted mono" x="325.0" y="73.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-accent-soft" x="350" y="26" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="375.0" y="44.0" text-anchor="middle" dominant-baseline="central" font-size="14">B</text>
+<text class="t-muted mono" x="375.0" y="73.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-accent-soft" x="400" y="26" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="425.0" y="44.0" text-anchor="middle" dominant-baseline="central" font-size="14">C</text>
+<text class="t-muted mono" x="425.0" y="73.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-none" x="450" y="26" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="475.0" y="73.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-none" x="500" y="26" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="525.0" y="73.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<text class="t-ink b" x="234.0" y="124.0" text-anchor="end" dominant-baseline="central" font-size="12">B's slot emptied</text>
+<text class="t-muted" x="234.0" y="140.0" text-anchor="end" dominant-baseline="central" font-size="10">find(C) is cut short</text>
+<rect class="s-ink f-none" x="250" y="112" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="275.0" y="159.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-accent-soft" x="300" y="112" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="325.0" y="130.0" text-anchor="middle" dominant-baseline="central" font-size="14">A</text>
+<text class="t-muted mono" x="325.0" y="159.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-bad-soft" x="350" y="112" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="375.0" y="159.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-accent-soft" x="400" y="112" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="425.0" y="130.0" text-anchor="middle" dominant-baseline="central" font-size="14">C</text>
+<text class="t-muted mono" x="425.0" y="159.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-none" x="450" y="112" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="475.0" y="159.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-none" x="500" y="112" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="525.0" y="159.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<path class="s-bad f-none" d="M325.0,110.0 Q350.0,92.0 375.0,110.0" stroke-width="1.3"/>
+<polygon class="s-none f-bad" points="375.0,110.0 369.8,101.8 365.6,107.7"/>
+<text class="t-bad" x="383.0" y="96.0" text-anchor="start" dominant-baseline="central" font-size="11">empty: stop.  "C is not here"</text>
+<text class="t-ink b" x="234.0" y="210.0" text-anchor="end" dominant-baseline="central" font-size="12">B's slot marked deleted</text>
+<text class="t-muted" x="234.0" y="226.0" text-anchor="end" dominant-baseline="central" font-size="10">find(C) passes over it</text>
+<rect class="s-ink f-none" x="250" y="198" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="275.0" y="245.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-accent-soft" x="300" y="198" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="325.0" y="216.0" text-anchor="middle" dominant-baseline="central" font-size="14">A</text>
+<text class="t-muted mono" x="325.0" y="245.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-muted-soft" x="350" y="198" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="375.0" y="216.0" text-anchor="middle" dominant-baseline="central" font-size="14">del</text>
+<text class="t-muted mono" x="375.0" y="245.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-good-soft" x="400" y="198" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="425.0" y="216.0" text-anchor="middle" dominant-baseline="central" font-size="14">C</text>
+<text class="t-muted mono" x="425.0" y="245.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-none" x="450" y="198" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="475.0" y="245.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-none" x="500" y="198" width="50" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="525.0" y="245.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<path class="s-good f-none" d="M325.0,196.0 Q350.0,178.0 375.0,196.0" stroke-width="1.3"/>
+<polygon class="s-none f-good" points="375.0,196.0 369.8,187.8 365.6,193.7"/>
+<path class="s-good f-none" d="M375.0,196.0 Q400.0,178.0 425.0,196.0" stroke-width="1.3"/>
+<polygon class="s-none f-good" points="425.0,196.0 419.8,187.8 415.6,193.7"/>
+<text class="t-good" x="439.0" y="182.0" text-anchor="start" dominant-baseline="central" font-size="11">found</text>
+</svg><figcaption>
+<span class="fignum">Figure 5.3</span> Why erasing needs tombstones. A, B, and C share home slot 3. If erasing B simply empties slot 4 (middle), a search for C stops there and wrongly reports C missing. Marking the slot “deleted” instead (bottom) keeps the probe path intact: searches pass over it, and a later insertion may reuse it.
+</figcaption></figure>
+<p>The fix is the third state. Erasing marks the slot <strong>deleted</strong>, leaving what is called a <strong>tombstone</strong>. A search treats a tombstone as occupied and keeps going. An insertion may reuse it.</p>
+<div class="listing"><div class="listing-file">code/ch05/probing_map.hpp</div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> erase<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t i <span class="op">=</span> home<span class="op">(</span>key<span class="op">);</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>state <span class="op">!=</span> State<span class="op">::</span>Empty<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>state <span class="op">==</span> State<span class="op">::</span>Full <span class="op">&amp;&amp;</span> <span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>key <span class="op">==</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>            <span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>state <span class="op">=</span> State<span class="op">::</span>Deleted<span class="op">;</span>   <span class="co">// leave a tombstone</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>            <span class="op">--</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>        i <span class="op">=</span> <span class="op">(</span>i <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&amp;</span> <span class="op">(</span><span class="va">slots_</span><span class="op">.</span>size<span class="op">()</span> <span class="op">-</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Tombstones keep the table correct, at a price: they lengthen probe sequences just as live entries do. A table that has seen many insertions and deletions can be clogged with them even if it holds few live entries. So the load factor that matters counts tombstones as well, and when it gets too high the table is rebuilt, which discards them.</p>
+<div class="listing"><div class="listing-file">code/ch05/probing_map.hpp</div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> put<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">,</span> V value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>V<span class="op">*</span> existing <span class="op">=</span> find<span class="op">(</span>key<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>        <span class="op">*</span>existing <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">);</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="dv">2</span> <span class="op">*</span> <span class="op">(</span><span class="va">used_</span> <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&gt;</span> <span class="va">slots_</span><span class="op">.</span>size<span class="op">())</span> rebuild<span class="op">();</span>   <span class="co">// keep it half empty</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t i <span class="op">=</span> home<span class="op">(</span>key<span class="op">);</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>state <span class="op">==</span> State<span class="op">::</span>Full<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>        i <span class="op">=</span> <span class="op">(</span>i <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&amp;</span> <span class="op">(</span><span class="va">slots_</span><span class="op">.</span>size<span class="op">()</span> <span class="op">-</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>state <span class="op">==</span> State<span class="op">::</span>Empty<span class="op">)</span> <span class="op">++</span><span class="va">used_</span><span class="op">;</span>      <span class="co">// else: reuse a tombstone</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    <span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>key <span class="op">=</span> key<span class="op">;</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    <span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>value <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">);</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>    <span class="va">slots_</span><span class="op">[</span>i<span class="op">].</span>state <span class="op">=</span> State<span class="op">::</span>Full<span class="op">;</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch05/probing_map.hpp</div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Re-insert every live entry into a fresh table. This drops all</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="co">// tombstones, and doubles the capacity if the live entries need it.</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> rebuild<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t new_capacity <span class="op">=</span> <span class="va">slots_</span><span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="dv">4</span> <span class="op">*</span> <span class="op">(</span><span class="va">size_</span> <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&gt;</span> new_capacity<span class="op">)</span> new_capacity <span class="op">*=</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span>Slot<span class="op">&gt;</span> old <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span><span class="va">slots_</span><span class="op">);</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="va">slots_</span><span class="op">.</span>assign<span class="op">(</span>new_capacity<span class="op">,</span> Slot<span class="op">{});</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="va">size_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="va">used_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>Slot<span class="op">&amp;</span> s <span class="op">:</span> old<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>s<span class="op">.</span>state <span class="op">==</span> State<span class="op">::</span>Full<span class="op">)</span> put<span class="op">(</span>s<span class="op">.</span>key<span class="op">,</span> <span class="bu">std::</span>move<span class="op">(</span>s<span class="op">.</span>value<span class="op">));</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<aside class="callout byhand"><p class="callout-title"><span class="lab">By hand first</span></p>
+<p>Take a table of eight slots and the hash function <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mi>k</mi><mrow><mspace width="0.222em"></mspace><mo>mod</mo><mspace width="0.222em"></mspace><mn>8</mn></mrow></mrow><annotation encoding="application/x-tex">h(k) = k \bmod 8</annotation></semantics></math>. By hand, with linear probing: insert 3, 11, 19, 4, 27; erase 11; search for 19; insert 35; search for 12. Draw the table after every step, marking tombstones, and count the probes for each operation. Then check yourself with the interactive figure in the web edition.</p>
+<p>Tracing a probing table is precise, mechanical work in which one slip makes everything after it wrong. It is exactly the kind of step-by-step state tracking at which language models are <em>least</em> dependable: ask one to carry out a sequence like this and it will often be right and sometimes confidently lose track of a tombstone. You need to be the one who can do it reliably.</p>
+</aside>
+</section>
+<section id="sec:clustering" class="level3 unnumbered">
+<h3 class="unnumbered">Clustering, and what it costs</h3>
+<p>Linear probing has a characteristic weakness. Occupied slots tend to form contiguous runs, called <strong>clusters</strong>, and clusters feed on themselves: a key that hashes anywhere into a cluster is added to its end, making it longer, and so a still bigger target. As the table fills, the clusters merge and the probe sequences lengthen rapidly.</p>
+<p>Knuth analyzed this in the early 1960s; he has called it the first nontrivial algorithm he ever analyzed satisfactorily, and credits it with setting the direction of his life’s work. For a table with load factor <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math>, the expected number of slots examined is approximately</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mn>1</mn><mn>2</mn></mfrac><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo>+</mo><mfrac><mn>1</mn><mrow><mn>1</mn><mo>−</mo><mi>α</mi></mrow></mfrac><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mrow><mspace width="0.333em"></mspace><mtext mathvariant="normal"> for a successful search, and </mtext><mspace width="0.333em"></mspace></mrow><mfrac><mn>1</mn><mn>2</mn></mfrac><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo>+</mo><mfrac><mn>1</mn><msup><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo>−</mo><mi>α</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mn>2</mn></msup></mfrac><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mrow><mspace width="0.333em"></mspace><mtext mathvariant="normal"> for an unsuccessful one</mtext></mrow></mrow><annotation encoding="application/x-tex">\frac{1}{2}\left(1 + \frac{1}{1-\alpha}\right) \text{ for a successful search, and } \frac{1}{2}\left(1 + \frac{1}{(1-\alpha)^2}\right) \text{ for an unsuccessful one}</annotation></semantics></math></p>
+<p><span class="citation" data-cites="knuth1998">(<a href="#ref-knuth1998" role="doc-biblioref">Knuth 1998</a>)</span>.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Load factor <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math></th>
+<th style="text-align: right;">Probes, key present</th>
+<th style="text-align: right;">Probes, key absent</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">0.25</td>
+<td style="text-align: right;">1.2</td>
+<td style="text-align: right;">1.4</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">0.50</td>
+<td style="text-align: right;">1.5</td>
+<td style="text-align: right;">2.5</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">0.75</td>
+<td style="text-align: right;">2.5</td>
+<td style="text-align: right;">8.5</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">0.90</td>
+<td style="text-align: right;">5.5</td>
+<td style="text-align: right;">50.5</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">0.95</td>
+<td style="text-align: right;">10.5</td>
+<td style="text-align: right;">200.5</td>
+</tr>
+</tbody>
+</table>
+<p>Up to about half full, linear probing is excellent. Beyond three-quarters it deteriorates quickly, and near full it is awful. That is why our table rebuilds itself whenever it would become more than half full. (With chaining, by contrast, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math> can exceed 1 without disaster.) Other probing rules, such as <em>quadratic probing</em> and <em>double hashing</em>, spread the probes out to reduce clustering, at some cost in locality.</p>
+</section>
+<section id="sec:hash-measure" class="level3 unnumbered">
+<h3 class="unnumbered">Which is faster?</h3>
+<p>On paper, the two designs are both expected constant time. On hardware they are not equal, for the reason that has now come up in three chapters running. A probing table is one contiguous array, and a probe sequence is a short walk through adjacent slots: usually a single cache line. A chained table follows a pointer from the bucket array to a separately allocated chain.</p>
+<p>Here are measured times for a successful lookup of a random integer key, in nanoseconds, in five structures: a sorted vector with binary search; <code>std::map</code>, a balanced tree we will study in <a href="07-balance.html">Chapter 7</a>; <code>std::unordered_map</code>, the standard library’s chained hash table; and the two tables from this chapter.</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;">sorted vector</th>
+<th style="text-align: right;"><code>std::map</code></th>
+<th style="text-align: right;"><code>unordered_map</code></th>
+<th style="text-align: right;"><code>ChainedMap</code></th>
+<th style="text-align: right;"><code>ProbingMap</code></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1,000</td>
+<td style="text-align: right;">37</td>
+<td style="text-align: right;">35</td>
+<td style="text-align: right;">7.3</td>
+<td style="text-align: right;">6.4</td>
+<td style="text-align: right;">4.5</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">47</td>
+<td style="text-align: right;">63</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">6.0</td>
+<td style="text-align: right;">3.3</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">100,000</td>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">155</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">9.2</td>
+<td style="text-align: right;">5.1</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">1,000,000</td>
+<td style="text-align: right;">100</td>
+<td style="text-align: right;">558</td>
+<td style="text-align: right;">31</td>
+<td style="text-align: right;">21</td>
+<td style="text-align: right;">11</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">10,000,000</td>
+<td style="text-align: right;">183</td>
+<td style="text-align: right;">1,025</td>
+<td style="text-align: right;">39</td>
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">14</td>
+</tr>
+</tbody>
+</table>
+<p>All three hash tables beat both logarithmic structures at every size: by a factor of three to six against the sorted vector, and by a factor that grows from about five to more than twenty-five against the tree. And among the hash tables, the probing table is the fastest at every size, roughly one and a half times as fast as our chained table and, from ten thousand keys up, two to three times as fast as <code>std::unordered_map</code>. (Even a hash table slows down as it grows, you will notice. The number of steps is constant, but one cache miss per lookup is unavoidable once the table is larger than the cache, since a good hash function sends each lookup to an unpredictable place. That is the price of scattering.)</p>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>The fastest general-purpose hash tables in use today are open-addressing designs. Google’s “Swiss table,” published in its Abseil library as <code>flat_hash_map</code> <span class="citation" data-cites="kulukundis2017">(<a href="#ref-kulukundis2017" role="doc-biblioref">Kulukundis 2017</a>)</span>, keeps one byte of metadata per slot in a separate dense array and uses the processor’s vector instructions to examine sixteen slots at a time; Rust’s standard <code>HashMap</code> is a port of the same design, and Python’s <code>dict</code> is also open addressing. C++’s <code>std::unordered_map</code>, by contrast, is in effect required to use chaining by guarantees in its interface (for instance, that a reference to an entry stays valid when the table grows), which is why performance-sensitive C++ code so often replaces it with a third-party table.</p>
+</aside>
+</section>
+</section>
+<section id="sec:using-hash" class="level2">
+<h2><span class="secnum">5.4</span> Using hash tables well</h2>
+<p>In your own programs you will use the standard library’s hash containers far more often than you write one: <code>std::unordered_map&lt;K, V&gt;</code> and <code>std::unordered_set&lt;K&gt;</code>. Here is the canonical first program, counting how often each word occurs in a text.</p>
+<div class="listing"><div class="listing-file">code/ch05/wordcount.cpp</div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>unordered_map<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">,</span> <span class="dt">int</span><span class="op">&gt;</span> count<span class="op">;</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>string word<span class="op">;</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span><span class="bu">std::</span>cin <span class="op">&gt;&gt;</span> word<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span>count<span class="op">[</span>word<span class="op">];</span>   <span class="co">// inserts word with count 0 if it is new</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The expression <code>count[word]</code> looks up <code>word</code> and returns a reference to its value. If the word is not yet in the map, <code>operator[]</code> <em>inserts it</em> with a default value (zero, for an <code>int</code>) and returns a reference to that. So <code>++count[word]</code> does the right thing for both new and repeated words.</p>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>That convenience has a sharp edge: <code>map[key]</code> on a missing key <em>adds the key</em>. Writing <code>if (count["zebra"] &gt; 0)</code> to test whether a word occurs will silently insert <code>"zebra"</code> with a count of zero. To look without inserting, use <code>count.contains(key)</code> or <code>count.find(key)</code>.</p>
+</aside>
+<p>To report the most frequent words we need them in order of frequency, and here we meet the main limitation of hashing.</p>
+<div class="listing"><div class="listing-file">code/ch05/wordcount.cpp</div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co">// A hash table has no useful order, so copy the entries into a</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="co">// vector and sort that: most frequent first, ties alphabetically.</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>pair<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">,</span> <span class="dt">int</span><span class="op">&gt;&gt;</span> entries<span class="op">(</span>count<span class="op">.</span>begin<span class="op">(),</span> count<span class="op">.</span>end<span class="op">());</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>sort<span class="op">(</span>entries<span class="op">.</span>begin<span class="op">(),</span> entries<span class="op">.</span>end<span class="op">(),</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>          <span class="op">[](</span><span class="at">const</span> <span class="kw">auto</span><span class="op">&amp;</span> a<span class="op">,</span> <span class="at">const</span> <span class="kw">auto</span><span class="op">&amp;</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>              <span class="cf">if</span> <span class="op">(</span>a<span class="op">.</span>second <span class="op">!=</span> b<span class="op">.</span>second<span class="op">)</span> <span class="cf">return</span> a<span class="op">.</span>second <span class="op">&gt;</span> b<span class="op">.</span>second<span class="op">;</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>              <span class="cf">return</span> a<span class="op">.</span>first <span class="op">&lt;</span> b<span class="op">.</span>first<span class="op">;</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>          <span class="op">});</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> entries<span class="op">.</span>size<span class="op">()</span> <span class="op">&amp;&amp;</span> i <span class="op">&lt;</span> <span class="dv">5</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> entries<span class="op">[</span>i<span class="op">].</span>second <span class="op">&lt;&lt;</span> <span class="ch">&#39; &#39;</span> <span class="op">&lt;&lt;</span> entries<span class="op">[</span>i<span class="op">].</span>first <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>A hash table keeps its entries in no meaningful order; the whole point of a good hash function is to destroy order. Iterating over an <code>unordered_map</code> visits the entries in an arbitrary sequence that can change whenever the table grows. If you need the smallest key, or all keys in a range, or the entries in sorted order, a hash table cannot help, and you must sort a copy, as here, or use a structure that maintains order. Those are the subject of the next two chapters.</p>
+<section id="sec:custom-keys" class="level3 unnumbered">
+<h3 class="unnumbered">Your own keys</h3>
+<p>The standard library knows how to hash numbers, strings, and pointers. To use your own type as a key you must supply two things: an equality test, and a hash function consistent with it, so that equal keys always get equal hashes.</p>
+<div class="listing"><div class="listing-file">code/ch05/map_test.cpp</div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Point <span class="op">{</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">;</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> y<span class="op">;</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> <span class="kw">operator</span><span class="op">==(</span><span class="at">const</span> Point<span class="op">&amp;</span> other<span class="op">)</span> <span class="at">const</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="co">// A hash for Point: combine the two coordinates, then scramble.</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> PointHash <span class="op">{</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t <span class="kw">operator</span><span class="op">()(</span><span class="at">const</span> Point<span class="op">&amp;</span> p<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>uint64_t packed <span class="op">=</span> <span class="op">(</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>uint64_t<span class="op">&gt;(</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>uint32_t<span class="op">&gt;(</span>p<span class="op">.</span>x<span class="op">))</span> <span class="op">&lt;&lt;</span> <span class="dv">32</span><span class="op">)</span> <span class="op">|</span></span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>                               <span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>uint32_t<span class="op">&gt;(</span>p<span class="op">.</span>y<span class="op">);</span></span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>mix<span class="op">(</span>packed<span class="op">));</span></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch05/map_test.cpp</div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>unordered_set<span class="op">&lt;</span>Point<span class="op">,</span> PointHash<span class="op">&gt;</span> visited<span class="op">;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>visited<span class="op">.</span>insert<span class="op">(</span>Point<span class="op">{</span><span class="dv">2</span><span class="op">,</span> <span class="dv">7</span><span class="op">});</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>visited<span class="op">.</span>insert<span class="op">(</span>Point<span class="op">{</span><span class="dv">2</span><span class="op">,</span> <span class="dv">7</span><span class="op">});</span>          <span class="co">// already present: no effect</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>visited<span class="op">.</span>size<span class="op">()</span> <span class="op">==</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>visited<span class="op">.</span>contains<span class="op">(</span>Point<span class="op">{</span><span class="dv">2</span><span class="op">,</span> <span class="dv">7</span><span class="op">}));</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(!</span>visited<span class="op">.</span>contains<span class="op">(</span>Point<span class="op">{</span><span class="dv">7</span><span class="op">,</span> <span class="dv">2</span><span class="op">}));</span></span></code></pre></div>
+</div>
+<p><code>operator==</code> with <code>= default</code> asks the compiler for member-by-member comparison. <code>PointHash</code> is a small class with a function-call operator, which is what the container’s <code>Hash</code> parameter expects. It packs the two coordinates into one 64-bit number and scrambles it.</p>
+<p>Two cautions. First, the obvious ways to combine fields are bad. Hashing a point as <code>x + y</code> or as <code>x ^ y</code> (exclusive or) makes <code>(2, 7)</code> collide with <code>(7, 2)</code>, and the second sends every point on the diagonal to zero. Second, <strong>never modify a key while it is in a hash table</strong>. Its position was computed from its old value. Change it and the entry is stranded in the wrong bucket, where no lookup will ever find it again.</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Models are good at spotting weak hash functions, because the weaknesses are structural. As a critic:</p>
+<blockquote>
+<p>Here is a hash function I wrote for a struct. Without rewriting it, name specific pairs of distinct keys that collide, and describe any <em>patterns</em> of keys that would pile up in few buckets.</p>
+</blockquote>
+<p>Verify what it says by actually hashing the pairs it names. Then fix the function yourself, preferably by combining standard-library hashes with a mixing step, not by inventing new arithmetic.</p>
+</aside>
+</section>
+<section id="sec:hashdos" class="level3 unnumbered">
+<h3 class="unnumbered">When the keys are chosen by an enemy</h3>
+<p>The expected-constant-time guarantee assumes that the keys are not correlated with the hash function. Suppose instead that someone who knows your hash function deliberately sends you thousands of keys that all hash to the same bucket. Every insertion then scans one ever-longer chain, and inserting <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> keys takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n^2)</annotation></semantics></math> time.</p>
+<p>This is a real attack. In 2003 Crosby and Wallach showed that many widely used programs could be made to stall by feeding them such keys <span class="citation" data-cites="crosby2003">(<a href="#ref-crosby2003" role="doc-biblioref">Crosby and Wallach 2003</a>)</span>, and in 2011 the same idea was used to show that a single small, carefully constructed web request could occupy a server’s processor for minutes. Web frameworks, it turned out, obligingly put every parameter of a request into a hash table. The attack is called <strong>hash flooding</strong>.</p>
+<p>The standard defense is to make the hash function unpredictable: mix a random secret, chosen when the program starts, into every hash, using a function designed so that an outsider cannot work out which keys collide. SipHash <span class="citation" data-cites="aumasson2012">(<a href="#ref-aumasson2012" role="doc-biblioref">Aumasson and Bernstein 2012</a>)</span> was created for this purpose and became the default string hash in Python, Ruby, and Rust, among others. One visible consequence: where a container’s iteration order follows its hash values, as with Rust’s <code>HashMap</code> or a Python <code>set</code> of strings, that order can differ from one run of a program to the next.</p>
+<p>The lesson is broader than hash tables. An <em>average-case</em> guarantee is only as good as the assumption behind it, and on the open internet, inputs are not random. They are chosen by whoever most wants your program to fail.</p>
+</section>
+</section>
+<section id="sec:bloom" class="level2">
+<h2><span class="secnum">5.5</span> Bloom filters</h2>
+<p>We end with a structure that shows how far the idea of hashing can be pushed if you are willing to relax what “correct” means.</p>
+<p>Suppose you have a hundred million keys, say every URL known to be malicious, and you want to test membership very fast and in very little memory. A hash set of a hundred million strings would occupy gigabytes. A <strong>Bloom filter</strong> <span class="citation" data-cites="bloom1970">(<a href="#ref-bloom1970" role="doc-biblioref">Bloom 1970</a>)</span> can do the job in about 120 megabytes, a bit over one byte per key, <em>without storing the keys at all</em>. The price is that it sometimes gives a wrong answer, in one direction only.</p>
+<ul>
+<li>If the filter says a key is <strong>absent</strong>, the key is definitely absent.</li>
+<li>If the filter says a key is <strong>present</strong>, the key is <em>probably</em> present. Occasionally it is not: a <strong>false positive</strong>.</li>
+</ul>
+<p>The structure is an array of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> bits, all initially zero, and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> different hash functions. To <strong>add</strong> a key, compute its <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> hash values and set those <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> bits to one. To <strong>test</strong> a key, compute the same <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> positions and look: if any of those bits is zero, the key was certainly never added, because adding it would have set that bit. If all <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> are one, the key was probably added, or else other keys happened to set all <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> of its bits between them.</p>
+<figure class="fig viz" id="fig:bloom"><div class="viz-widget" data-viz="bloom"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 216" width="640" height="216" role="img" aria-label="A 32-bit Bloom filter with two keys added and a false positive on a third." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-none" x="48" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="56.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="65" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="73.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="82" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="90.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-accent-soft" x="99" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="107.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">1</text>
+<rect class="s-ink f-none" x="116" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="124.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="133" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="141.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="150" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="158.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="167" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="175.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="184" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="192.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-accent-soft" x="201" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="209.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">1</text>
+<rect class="s-ink f-none" x="218" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="226.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="235" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="243.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="252" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="260.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="269" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="277.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-accent-soft" x="286" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="294.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">1</text>
+<rect class="s-ink f-none" x="303" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="311.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="320" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="328.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="337" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="345.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="354" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="362.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="371" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="379.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="388" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="396.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-accent-soft" x="405" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="413.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">1</text>
+<rect class="s-ink f-none" x="422" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="430.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="439" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="447.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="456" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="464.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="473" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="481.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="490" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="498.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-accent-soft" x="507" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="515.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">1</text>
+<rect class="s-ink f-none" x="524" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="532.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="541" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="549.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="558" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="566.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<rect class="s-ink f-none" x="575" y="92" width="17" height="26" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="583.5" y="105.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<text class="t-accent mono b" x="170.0" y="20.0" text-anchor="middle" dominant-baseline="central" font-size="13">add("cat")</text>
+<line class="s-accent f-none" x1="170.0" y1="32.0" x2="111.9" y2="85.0" stroke-width="1.1"/>
+<polygon class="s-none f-accent" points="107.5,89.0 116.6,85.6 111.7,80.3"/>
+<line class="s-accent f-none" x1="170.0" y1="32.0" x2="289.0" y2="86.5" stroke-width="1.1"/>
+<polygon class="s-none f-accent" points="294.5,89.0 287.8,82.0 284.8,88.5"/>
+<line class="s-accent f-none" x1="170.0" y1="32.0" x2="509.6" y2="88.0" stroke-width="1.1"/>
+<polygon class="s-none f-accent" points="515.5,89.0 507.2,84.0 506.0,91.1"/>
+<text class="t-accent2 mono b" x="420.0" y="20.0" text-anchor="middle" dominant-baseline="central" font-size="13">add("dog")</text>
+<line class="s-accent2 f-none" x1="420.0" y1="32.0" x2="215.3" y2="87.4" stroke-width="1.1"/>
+<polygon class="s-none f-accent2" points="209.5,89.0 219.1,90.1 217.2,83.2"/>
+<line class="s-accent2 f-none" x1="420.0" y1="32.0" x2="300.0" y2="86.5" stroke-width="1.1"/>
+<polygon class="s-none f-accent2" points="294.5,89.0 304.2,88.6 301.2,82.0"/>
+<line class="s-accent2 f-none" x1="420.0" y1="32.0" x2="414.2" y2="83.0" stroke-width="1.1"/>
+<polygon class="s-none f-accent2" points="413.5,89.0 418.1,80.5 410.9,79.7"/>
+<text class="t-bad mono b" x="250.0" y="196.0" text-anchor="middle" dominant-baseline="central" font-size="13">might_contain("emu")</text>
+<line class="s-bad f-none dash" x1="250.0" y1="184.0" x2="113.0" y2="123.4" stroke-width="1.1"/>
+<polygon class="s-none f-bad" points="107.5,121.0 114.3,127.9 117.2,121.3"/>
+<line class="s-bad f-none dash" x1="250.0" y1="184.0" x2="212.7" y2="126.0" stroke-width="1.1"/>
+<polygon class="s-none f-bad" points="209.5,121.0 211.3,130.5 217.4,126.6"/>
+<line class="s-bad f-none dash" x1="250.0" y1="184.0" x2="407.9" y2="123.2" stroke-width="1.1"/>
+<polygon class="s-none f-bad" points="413.5,121.0 403.8,120.9 406.4,127.6"/>
+<text class="t-bad" x="360.0" y="196.0" text-anchor="start" dominant-baseline="central" font-size="11">all three bits are 1: a false positive</text>
+<text class="t-muted mono" x="48.0" y="132.0" text-anchor="middle" dominant-baseline="central" font-size="9">0</text>
+<text class="t-muted mono" x="583.5" y="132.0" text-anchor="middle" dominant-baseline="central" font-size="9">31</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 5.4</span> A Bloom filter with 32 bits and three hash functions, after adding two keys. Testing a key checks its three bits. A key whose three bits were all set by <em>other</em> keys is reported present although it was never added: a false positive. In the web edition, add keys and test others to see the false-positive rate rise as the filter fills.
+</figcaption></figure>
+<div class="listing"><div class="listing-file">code/ch05/bloom.hpp</div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> BloomFilter <span class="op">{</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// bits: the size of the bit array. hashes: how many bits each key sets.</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    BloomFilter<span class="op">(</span><span class="bu">std::</span>size_t bits<span class="op">,</span> <span class="dt">int</span> hashes<span class="op">)</span> <span class="op">:</span> <span class="va">bits_</span><span class="op">(</span>bits<span class="op">,</span> <span class="kw">false</span><span class="op">),</span> <span class="va">k_</span><span class="op">(</span>hashes<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> add<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="va">k_</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="va">bits_</span><span class="op">[</span>position<span class="op">(</span>key<span class="op">,</span> i<span class="op">)]</span> <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// false: the key was definitely never added.</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// true:  the key was probably added (or its bits were set by others).</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> might_contain<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> key<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="va">k_</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(!</span><span class="va">bits_</span><span class="op">[</span>position<span class="op">(</span>key<span class="op">,</span> i<span class="op">)])</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// The i-th hash of key. Two real hash values are combined to simulate</span></span>
+<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// as many hash functions as we need:  h1 + i * h2.</span></span>
+<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t position<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> key<span class="op">,</span> <span class="dt">int</span> i<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>uint64_t h1 <span class="op">=</span> fnv1a<span class="op">(</span>key<span class="op">);</span></span>
+<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>uint64_t h2 <span class="op">=</span> mix<span class="op">(</span>h1<span class="op">)</span> <span class="op">|</span> <span class="dv">1</span><span class="op">;</span>   <span class="co">// odd, so it is never zero</span></span>
+<span id="cb21-25"><a href="#cb21-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">(</span>h1 <span class="op">+</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>uint64_t<span class="op">&gt;(</span>i<span class="op">)</span> <span class="op">*</span> h2<span class="op">)</span> <span class="op">%</span> <span class="va">bits_</span><span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb21-26"><a href="#cb21-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb21-27"><a href="#cb21-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-28"><a href="#cb21-28" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">bool</span><span class="op">&gt;</span> <span class="va">bits_</span><span class="op">;</span></span>
+<span id="cb21-29"><a href="#cb21-29" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> <span class="va">k_</span><span class="op">;</span></span>
+<span id="cb21-30"><a href="#cb21-30" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<p>The code simulates <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> independent hash functions by combining two real hash values, a standard technique. Note what is <em>missing</em>: there is no way to list the keys, no way to count them, and no way to remove one, since clearing a key’s bits might clear bits that other keys depend on.</p>
+<section id="sec:bloom-math" class="level3 unnumbered">
+<h3 class="unnumbered">How wrong is it?</h3>
+<p>After <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> keys have been added to a filter of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> bits with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> hash functions, the probability that a particular bit is still zero is about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>e</mi><mrow><mo>−</mo><mi>k</mi><mi>n</mi><mi>/</mi><mi>m</mi></mrow></msup><annotation encoding="application/x-tex">e^{-kn/m}</annotation></semantics></math>. A false positive needs all <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> of a key’s bits to be one, so the false-positive rate is approximately</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo>−</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>k</mi><mi>n</mi><mi>/</mi><mi>m</mi></mrow></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>k</mi></msup><mi>.</mi></mrow><annotation encoding="application/x-tex">\left(1 - e^{-kn/m}\right)^k.</annotation></semantics></math></p>
+<p>For a given number of bits per key, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>m</mi><mi>/</mi><mi>n</mi></mrow><annotation encoding="application/x-tex">m/n</annotation></semantics></math>, the rate is lowest when <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>≈</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>m</mi><mi>/</mi><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>ln</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">k \approx (m/n) \ln 2</annotation></semantics></math>, about 0.7 times the bits per key. Here is that formula against a measurement, for a hundred thousand keys tested against a million non-members.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Bits per key</th>
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math></th>
+<th style="text-align: right;">Measured false positives</th>
+<th style="text-align: right;">Predicted</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">14.6%</td>
+<td style="text-align: right;">14.7%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">2.13%</td>
+<td style="text-align: right;">2.16%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">0.81%</td>
+<td style="text-align: right;">0.82%</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">0.042%</td>
+<td style="text-align: right;">0.046%</td>
+</tr>
+</tbody>
+</table>
+<p>Ten bits per key gives an error rate under one percent, and each further bit and a half or so halves it again. The key itself might be a hundred bytes long; the filter does not care.</p>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>Bloom filters appear wherever a cheap “definitely not” can save an expensive operation. The storage engines behind many large databases keep their data in a series of sorted files on disk, and keep a Bloom filter for each file in memory. Before reading a file to look for a key, the engine asks the filter, and most of the time the filter says “not in this one,” saving a disk read (<a href="10-wild.html">Chapter 10</a> returns to this). Web browsers have used them to check URLs against lists of dangerous sites without downloading the lists, and content delivery networks use them to avoid caching objects that are requested only once.</p>
+</aside>
+<p>The Bloom filter is the first structure in this book whose answer to <em>what does it promise?</em> is deliberately weaker than “the right answer.” That is a legitimate thing to promise, provided the weakness is stated exactly and the one-sidedness is used properly: the filter’s “no” is trusted absolutely, and its “yes” is treated as “go and check.”</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Tracing hash tables by hand is good practice, and a model can generate exercises, though it should not be trusted to grade them. Try:</p>
+<blockquote>
+<p>Give me a hash table exercise: a table size, the hash function h(k) = k mod m, and a sequence of about ten inserts, erases, and lookups using linear probing with tombstones. Do not show the answer.</p>
+</blockquote>
+<p>Work it on paper, then check your final table against the interactive figure in this chapter, not against the model. If you do ask the model for its answer and it disagrees with yours, trace the disputed step together; you will sometimes find that the mistake is the model’s.</p>
+</aside>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">Hash tables</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+An array of buckets, indexed by a hash of the key. With chaining, each bucket leads to a separate small chain. With open addressing, the entries are in the array itself, and a key lives at or shortly after its home slot.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+A key is always in the bucket (or on the probe path) that its hash selects. Equal keys have equal hashes. No ordering of any kind. In a probing table, no empty slot lies between a key’s home and its actual position, which is why erasure leaves tombstones.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Find, insert, erase: expected <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> when the hash function spreads keys well and the load factor is bounded; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> in the worst case. Growth is amortized. Memory: a constant factor more than the entries need. Probing tables are markedly faster in practice because they stay in one block.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+Differential testing against <code>std::unordered_map</code>, with both a small key range (to force repeats, replacements, and erasures of present keys) and a large one (to force growth); an invariant check that every entry is where its hash says; and a look at the chain-length distribution, which reveals a bad hash function at once.
+</dd>
+</dl>
+</aside>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">Bloom filter</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+An array of bits. Each key is represented only by the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> bit positions its hashes select. The keys themselves are not stored.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+No false negatives, ever. False positives at a predictable rate determined by the bits per key. No deletion, no enumeration.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(k)</annotation></semantics></math> per operation, independent of the number of keys. About ten bits per key for a one-percent error rate.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+Test that every added key is reported present. Measure the false-positive rate on keys known to be absent, and compare it with the formula.
+</dd>
+</dl>
+</aside>
+</section>
+</section>
+<section id="sec:hashing-ex" class="level2 unnumbered">
+<h2 class="unnumbered">Exercises</h2>
+<ol type="1">
+<li><p>A table has 10 buckets and uses <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mi>k</mi><mrow><mspace width="0.222em"></mspace><mo>mod</mo><mspace width="0.222em"></mspace><mn>10</mn></mrow></mrow><annotation encoding="application/x-tex">h(k) = k \bmod 10</annotation></semantics></math>. Insert the keys 12, 44, 13, 88, 23, 94, 11, 39, 5, in that order, (a) using separate chaining, and (b) using linear probing. Draw both tables. For each, what is the largest number of key comparisons any successful search would need?</p></li>
+<li><p>Continuing part (b): erase 23 and then 94, using tombstones. Now search for 5, and count the slots examined. Then insert 33. Which slot does it go in?</p></li>
+<li><p>Explain what is wrong with each of these as a hash function for strings: (a) the length of the string; (b) the character code of the first character; (c) a random number; (d) the address of the string object in memory.</p></li>
+<li><p>Suppose the keys of a <code>ChainedMap&lt;int, int&gt;</code> are all multiples of 1024, and the table uses <code>std::hash&lt;int&gt;</code>, which on many systems returns the integer unchanged. Our table always has a power-of-two number of buckets. Predict the chain lengths after inserting the first 1,000 multiples of 1024. Verify with <code>longest_chain()</code>. Then fix the problem in two different ways: by changing <code>bucket_of</code>, and by changing how the number of buckets is chosen. (Many standard library implementations keep the bucket count prime. Why does that help?)</p></li>
+<li><p>In <code>ProbingMap</code>, <code>put</code> begins by calling <code>find</code>, and only then looks for a free slot. Explain why it would be wrong to insert a new key into the first tombstone encountered without first completing the search for the key.</p></li>
+<li><p>Show that if a probing table never rebuilt itself, a long enough sequence of alternating insertions and erasures, of <em>distinct</em> keys, would eventually make every unsuccessful search examine every slot, even though the table never holds more than one live entry.</p></li>
+<li><p>Using the formulas in <a href="#sec:probing">Section 5.3</a>, compute the expected probes for successful and unsuccessful searches at load factors 0.6, 0.8, and 0.99. A colleague proposes saving memory by letting a probing table fill to 95% before growing. Write two sentences in reply.</p></li>
+<li><p>Write a function that determines whether two strings are anagrams of each other in expected <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> time, using a hash map from characters to counts. Then write a function that, given a vector of words, groups them into sets of mutual anagrams. What should the <em>key</em> of your map be?</p></li>
+<li><p>Given a vector of integers and a target sum, determine in expected <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> time whether any two elements add up to the target. (The brute-force method of <a href="02-cost.html">Chapter 2</a> is quadratic.)</p></li>
+<li><p>Implement a <code>HashSet&lt;K&gt;</code> class with <code>insert</code>, <code>contains</code>, <code>erase</code>, and <code>size</code>, using either collision strategy. You may <em>not</em> simply wrap a map: store keys only. Test it differentially against <code>std::unordered_set</code>.</p></li>
+<li><p>A Bloom filter has <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>m</mi><mo>=</mo><mn>80</mn><mo>,</mo><mn>000</mn></mrow><annotation encoding="application/x-tex">m = 80{,}000</annotation></semantics></math> bits and will hold <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>10</mn><mo>,</mo><mn>000</mn></mrow><annotation encoding="application/x-tex">n = 10{,}000</annotation></semantics></math> keys. What <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> minimizes the false-positive rate, and what is the rate? If you could afford only <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>=</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">k = 2</annotation></semantics></math> (hashing is expensive for your keys), what would the rate be?</p></li>
+<li><p>A <em>counting</em> Bloom filter replaces each bit with a small counter: adding a key increments its <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> counters, and removing a key decrements them. Explain why this permits deletion. What new way can it now fail? What does it cost in space?</p></li>
+<li><p><strong>With a model, as critic.</strong> Write a hash function for a struct with three <code>int</code> fields. Before testing it, ask a model to predict which patterns of keys will collide. Then <em>measure</em>: hash every triple with fields in the range 0 to 49 (125,000 keys) into 262,144 buckets and report the longest chain and the number of empty buckets, alongside the same figures for <code>mix</code> applied to a packed combination of the fields. Were the model’s predictions right?</p></li>
+<li><p><strong>Lab.</strong> Build a spell checker. Load a word list (your system probably has one at <code>/usr/share/dict/words</code>) into (a) your own probing hash set, (b) a <code>std::unordered_set</code>, (c) a sorted <code>std::vector</code> searched with binary search, and (d) a Bloom filter sized for a 1% false-positive rate. For each, measure the time to build it, the time to check every word of a large text, and the memory used. Present the results as a table and state which you would ship in a spell checker for a phone, and why. For the Bloom filter, also report how many misspelled words in your test text it wrongly accepted.</p></li>
+</ol>
+</section>
+<section id="sec:hashing-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Chapter notes</h2>
+<p>Hashing was invented at IBM in the early 1950s; Knuth <span class="citation" data-cites="knuth1998">(<a href="#ref-knuth1998" role="doc-biblioref">Knuth 1998</a>)</span> gives the history and the definitive analysis of both chaining and linear probing, including the formulas quoted in this chapter. Cormen et al. <span class="citation" data-cites="clrs2022">(<a href="#ref-clrs2022" role="doc-biblioref">Cormen et al. 2022</a>)</span> present the analysis under the “simple uniform hashing” assumption used here, and go on to <em>universal hashing</em>, due to Carter and Wegman <span class="citation" data-cites="carter1979">(<a href="#ref-carter1979" role="doc-biblioref">Carter and Wegman 1979</a>)</span>, in which the hash function is chosen at random from a family so that good expected performance holds for every set of keys, not merely for typical ones. That idea is the theoretical ancestor of the keyed hash functions now used to resist hash-flooding attacks <span class="citation" data-cites="crosby2003 aumasson2012">(<a href="#ref-crosby2003" role="doc-biblioref">Crosby and Wallach 2003</a>; <a href="#ref-aumasson2012" role="doc-biblioref">Aumasson and Bernstein 2012</a>)</span>.</p>
+<p>The Bloom filter is from a 1970 paper <span class="citation" data-cites="bloom1970">(<a href="#ref-bloom1970" role="doc-biblioref">Bloom 1970</a>)</span> that is five pages long and still worth reading. For the engineering of a modern open-addressing table, Kulukundis’s talk on the design of the Swiss table <span class="citation" data-cites="kulukundis2017">(<a href="#ref-kulukundis2017" role="doc-biblioref">Kulukundis 2017</a>)</span> is an excellent hour.</p>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-aumasson2012" class="csl-entry" role="listitem">
+Aumasson, Jean-Philippe, and Daniel J. Bernstein. 2012. <span>“<span>SipHash</span>: A Fast Short-Input <span>PRF</span>.”</span> In <em>Progress in Cryptology – <span>INDOCRYPT</span> 2012</em>, 7668:489–508. Lecture Notes in Computer Science. Springer.
+</div>
+<div id="ref-bloom1970" class="csl-entry" role="listitem">
+Bloom, Burton H. 1970. <span>“Space/Time Trade-Offs in Hash Coding with Allowable Errors.”</span> <em>Communications of the ACM</em> 13 (7): 422–26.
+</div>
+<div id="ref-carter1979" class="csl-entry" role="listitem">
+Carter, J. Lawrence, and Mark N. Wegman. 1979. <span>“Universal Classes of Hash Functions.”</span> <em>Journal of Computer and System Sciences</em> 18 (2): 143–54.
+</div>
+<div id="ref-clrs2022" class="csl-entry" role="listitem">
+Cormen, Thomas H., Charles E. Leiserson, Ronald L. Rivest, and Clifford Stein. 2022. <em>Introduction to Algorithms</em>. 4th ed. MIT Press.
+</div>
+<div id="ref-crosby2003" class="csl-entry" role="listitem">
+Crosby, Scott A., and Dan S. Wallach. 2003. <span>“Denial of Service via Algorithmic Complexity Attacks.”</span> In <em>Proceedings of the 12th <span>USENIX</span> Security Symposium</em>, 29–44.
+</div>
+<div id="ref-knuth1998" class="csl-entry" role="listitem">
+Knuth, Donald E. 1998. <em>The Art of Computer Programming, Volume 3: Sorting and Searching</em>. 2nd ed. Addison-Wesley.
+</div>
+<div id="ref-kulukundis2017" class="csl-entry" role="listitem">
+Kulukundis, Matt. 2017. <span>“Designing a Fast, Efficient, Cache-Friendly Hash Table, Step by Step.”</span> Talk at CppCon 2017, Bellevue, WA.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="04-links.html"><span>← Previous</span>Links, Stacks, and Queues</a>
+<a class="next" href="06-trees.html"><span>Next →</span>Recursion and Trees</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+<script src="assets/viz/core.js"></script>
+<script src="assets/viz/hashtable.js"></script>
+<script src="assets/viz/bloom.js"></script>
+<script>Viz.mountAll();</script>
+</body>
+</html>

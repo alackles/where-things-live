@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where Things Live: Data Structures in Modern C++</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-cover">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Data Structures in Modern C++</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class="current"><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+
+<header class="cover">
+  <p class="kicker">A ten-week text for CMSC 270 at Lawrence University</p>
+  <h1>Where Things Live</h1>
+  <p class="sub">Data Structures in Modern C++</p>
+  <p class="ed">First draft edition, Fall 2026</p>
+  <div class="fourq-strip" aria-label="The four questions this book asks of every data structure">
+    <div><b>Where does it live?</b><span>layout and ownership in memory</span></div>
+    <div><b>What does it promise?</b><span>interface and invariants</span></div>
+    <div><b>What does it cost?</b><span>on paper and on real hardware</span></div>
+    <div><b>How do you know?</b><span>tests, tools, and measurement</span></div>
+  </div>
+  <p class="links"><a class="btn" href="00-preface.html">Start reading</a>
+  <a class="btn ghost" href="where-things-live.pdf">PDF edition</a></p>
+</header>
+<ol class="cover-toc">
+<li><a href="00-preface.html"><span class="k"></span><span class="t">Read This First</span><span class="b">What this book is, the four questions it keeps asking, and how to learn with (and without) a language model.</span></a></li>
+<li><a href="01-memory.html"><span class="k">Chapter 1<span class="wk">Week 1</span></span><span class="t">Memory Is the Material</span><span class="b">C++ from the ground up. Objects are bytes; variables are places; pointers are addresses. The stack, the heap, and the tools that catch you when you fall.</span></a></li>
+<li><a href="02-cost.html"><span class="k">Chapter 2<span class="wk">Week 2</span></span><span class="t">What Does It Cost?</span><span class="b">Counting steps, growth rates, and Big-O. Binary search and its invariant. Measuring real programs, and the first hint that the machine has opinions.</span></a></li>
+<li><a href="03-vector.html"><span class="k">Chapter 3<span class="wk">Week 3</span></span><span class="t">Building a Vector</span><span class="b">We build std::vector. Class invariants, RAII, copying and moving, templates, iterators, amortized analysis, and a testing method we will reuse all term.</span></a></li>
+<li><a href="04-links.html"><span class="k">Chapter 4<span class="wk">Week 4</span></span><span class="t">Links, Stacks, and Queues</span><span class="b">The other way to arrange memory. Linked lists, stacks, queues, ring buffers, and an honest look at what caches do to pointer-chasing.</span></a></li>
+<li><a href="05-hashing.html"><span class="k">Chapter 5<span class="wk">Week 5</span></span><span class="t">Hashing</span><span class="b">The workhorse of modern software. Hash functions, chaining, open addressing, load factors, adversarial inputs, and Bloom filters.</span></a></li>
+<li><a href="06-trees.html"><span class="k">Chapter 6<span class="wk">Week 6</span></span><span class="t">Recursion and Trees</span><span class="b">Recursion as a habit of thought. Binary trees, traversals, binary search trees, ownership with unique_ptr, and the problem of shape.</span></a></li>
+<li><a href="07-balance.html"><span class="k">Chapter 7<span class="wk">Week 7</span></span><span class="t">Balance</span><span class="b">Rotations and AVL trees, then the family: red-black trees, B-trees, and what an ordered map buys you that a hash table cannot.</span></a></li>
+<li><a href="08-heaps-sorting.html"><span class="k">Chapter 8<span class="wk">Week 8</span></span><span class="t">Heaps and Sorting</span><span class="b">A tree that lives in an array. Priority queues, heapsort, mergesort, quicksort, the n log n barrier, and what std::sort really does.</span></a></li>
+<li><a href="09-graphs.html"><span class="k">Chapter 9<span class="wk">Week 9</span></span><span class="t">Graphs</span><span class="b">Relationships as data. Representations, breadth-first and depth-first search, Dijkstra&#x27;s algorithm, and union-find.</span></a></li>
+<li><a href="10-wild.html"><span class="k">Chapter 10<span class="wk">Week 10</span></span><span class="t">Data Structures in the Wild</span><span class="b">Choosing and combining structures. LRU caches, tries, tokenizers, database indexes, Git, vector search, and what comes next.</span></a></li>
+<li><a href="a1-toolchain.html"><span class="k">Appendix A</span><span class="t">The Toolchain</span><span class="b">Compiling, warnings, sanitizers, and reading the error messages.</span></a></li>
+<li><a href="a2-math.html"><span class="k">Appendix B</span><span class="t">A Little Mathematics</span><span class="b">Logarithms, sums, induction, and a little probability.</span></a></li>
+<li><a href="a3-stl.html"><span class="k">Appendix C</span><span class="t">A Field Guide to the Standard Containers</span><span class="b">Costs, invalidation rules, and idioms for the standard containers.</span></a></li>
+<li><a href="z1-colophon.html"><span class="k"></span><span class="t">How This Book Was Made</span><span class="b">How this book was made, and how far to trust it.</span></a></li>
+<li><a href="bibliography.html"><span class="k"></span><span class="t">Bibliography</span><span class="b">Every source cited, in one list.</span></a></li>
+</ol>
+
+</article>
+<footer class="pagenav">
+<a class="next" href="00-preface.html"><span>Next →</span>Read This First</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+
+</body>
+</html>

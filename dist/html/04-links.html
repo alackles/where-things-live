@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Links, Stacks, and Queues · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-chapter">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Chapter 4: Links, Stacks, and Queues</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class="current"><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+<ol class="secs">
+<li><a href="#sec:nodes"><span class="n">4.1</span> Nodes and links</a></li>
+<li><a href="#sec:rewiring"><span class="n">4.2</span> Rewiring</a></li>
+<li><a href="#sec:dlist"><span class="n">4.3</span> Doubly linked lists and sentinels</a></li>
+<li><a href="#sec:stacks-queues"><span class="n">4.4</span> Stacks and queues</a></li>
+<li><a href="#sec:cache"><span class="n">4.5</span> Contiguous versus linked, on real hardware</a></li>
+<li><a href="#sec:links-ex">Exercises</a></li>
+<li><a href="#sec:links-notes">Chapter notes</a></li>
+</ol>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:links">
+<p class="kicker">
+Chapter 4 · Week 4
+</p>
+<h1>
+Links, Stacks, and Queues
+</h1>
+</header>
+<aside class="callout goals"><p class="callout-title"><span class="lab">This week</span></p>
+<p>By the end of this week you should be able to:</p>
+<ul>
+<li>implement a singly linked list, including insertion, removal, reversal, and a correct destructor, and draw what each operation does to the pointers;</li>
+<li>explain how a sentinel node removes the special cases from a doubly linked list;</li>
+<li>say what an abstract data type is, and implement a stack on a vector and a queue on a circular buffer;</li>
+<li>give the costs of the main operations on vectors and linked lists, and explain why measured performance often contradicts a naive reading of those costs;</li>
+<li>decide, with reasons, when a linked structure is the right choice.</li>
+</ul>
+</aside>
+<p>The vector of <a href="03-vector.html">Chapter 3</a> has one weakness. Its elements sit shoulder to shoulder in a single block, so putting a new element anywhere except the end means sliding everything after it over by one. Inserting at the front of a million-element vector moves a million elements.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 4.1</span></p>
+<p>Design, in your head, a way of storing a sequence in which a new element can be inserted at the front, or between any two existing elements, <em>without moving any of the others</em>. What does each element need to carry besides its value? What ability of the vector do you have to give up?</p>
+<details class="answer"><summary>Answer</summary>
+<p>If elements are not going to move, they cannot rely on position in memory to say what order they are in. Each element must instead carry that information itself: the address of the element that follows it. You give up contiguity, and with it the ability to compute where the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>-th element is. The only way to reach it is to start at the front and follow <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> links.</p>
+</details>
+</aside>
+<p>That design is the <strong>linked list</strong>, the second fundamental answer to the question <em>where does it live?</em> A vector keeps its elements in one place and the order is implicit in the layout. A linked list scatters its elements across the heap and makes the order explicit with pointers. Nearly every structure in the second half of this book (trees, graphs, the chains inside a hash table) is built from the same idea of nodes joined by pointers, so fluency here is not optional.</p>
+<p>But this chapter also has a second job, which is to be honest about linked lists. They occupy a place of honor in the traditional curriculum, and a table of Big-O costs makes them look like the natural choice whenever a program inserts and deletes a lot. On the hardware of the last twenty years that is mostly false, and the final section shows the measurements.</p>
+<section id="sec:nodes" class="level2">
+<h2><span class="secnum">4.1</span> Nodes and links</h2>
+<p>A linked list is made of <strong>nodes</strong>. Each node holds one element and a pointer to the next node.</p>
+<div class="listing"><div class="listing-file">code/ch04/list.hpp</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    T value<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> next<span class="op">;</span>   <span class="co">// the following node, or nullptr at the end</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<p>The list object itself holds a pointer to the first node, traditionally called the <strong>head</strong>, and (for convenience) a count. The last node’s <code>next</code> is <code>nullptr</code>, which is how you know it is the last. An empty list is a null head. Each node is a separate heap allocation; the nodes may be anywhere in memory, in any order. <a href="#fig:linked-list">Figure 4.1</a> shows a list of three.</p>
+<figure class="fig viz" id="fig:linked-list"><div class="viz-widget" data-viz="linkedlist"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 120" width="640" height="120" role="img" aria-label="A head pointer and three list nodes holding 4, 1 and 3." xmlns="http://www.w3.org/2000/svg">
+<text class="t-ink mono b" x="62.0" y="38.0" text-anchor="middle" dominant-baseline="central" font-size="13">head</text>
+<rect class="s-ink f-muted-soft" x="40" y="50" width="44" height="34" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="62" cy="67" r="2.8" stroke-width="1.3"/>
+<rect class="s-ink f-accent-soft" x="150" y="50" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="202.1" y1="50.0" x2="202.1" y2="84.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="176.0" y="67.0" text-anchor="middle" dominant-baseline="central" font-size="14">4</text>
+<circle class="s-ink f-ink" cx="218.04" cy="67.0" r="2.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="62.0" y1="67.0" x2="142.0" y2="67.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="148.0,67.0 139.0,63.4 139.0,70.6"/>
+<rect class="s-ink f-accent-soft" x="300" y="50" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="352.1" y1="50.0" x2="352.1" y2="84.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="326.0" y="67.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<circle class="s-ink f-ink" cx="368.03999999999996" cy="67.0" r="2.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="218.0" y1="67.0" x2="292.0" y2="67.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="298.0,67.0 289.0,63.4 289.0,70.6"/>
+<rect class="s-ink f-accent-soft" x="450" y="50" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="502.1" y1="50.0" x2="502.1" y2="84.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="476.0" y="67.0" text-anchor="middle" dominant-baseline="central" font-size="14">3</text>
+<line class="s-muted f-none" x1="505.1" y1="81.0" x2="531.0" y2="53.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="368.0" y1="67.0" x2="442.0" y2="67.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="448.0,67.0 439.0,63.4 439.0,70.6"/>
+<text class="t-muted" x="176.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="10">value</text>
+<text class="t-muted" x="218.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="10">next</text>
+<text class="t-muted mono" x="518.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="10">nullptr</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 4.1</span> A singly linked list. The list object holds <code>head</code>; each node holds a value and the address of the next node; the last node’s <code>next</code> is null. In the web edition you can insert, remove, and reverse, and watch each pointer assignment happen in order.
+</figcaption></figure>
+<p>Notice that <code>Node</code> refers to itself. A <code>Node</code> cannot <em>contain</em> a <code>Node</code> (how big would it be?), but it can contain a pointer to one, since a pointer is eight bytes whatever it points to.</p>
+<section id="sec:push-front" class="level3 unnumbered">
+<h3 class="unnumbered">Adding at the front</h3>
+<div class="listing"><div class="listing-file">code/ch04/list.hpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> push_front<span class="op">(</span>T value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">head_</span> <span class="op">=</span> <span class="kw">new</span> Node<span class="op">{</span><span class="bu">std::</span>move<span class="op">(</span>value<span class="op">),</span> <span class="va">head_</span><span class="op">};</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> pop_front<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(</span><span class="va">head_</span> <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">);</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> doomed <span class="op">=</span> <span class="va">head_</span><span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="va">head_</span> <span class="op">=</span> <span class="va">head_</span><span class="op">-&gt;</span>next<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span> doomed<span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">--</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>T<span class="op">&amp;</span> front<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(</span><span class="va">head_</span> <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">);</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="va">head_</span><span class="op">-&gt;</span>value<span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p><code>push_front</code> is one line, and it repays slow reading. The expression <code>new Node{std::move(value), head_}</code> allocates a node whose <code>value</code> is the new element and whose <code>next</code> is <em>the current head</em>. Only then is the result assigned to <code>head_</code>. Two pointer changes, in a definite order: first aim the new node at the old first node, then aim the head at the new node. Do them in the other order and the address of the old first node is overwritten before it has been saved anywhere. The whole existing list becomes unreachable: a leak of every node.</p>
+<p>That is the first lesson of linked structures. <strong>Before you overwrite a pointer, make sure the address it held is saved somewhere, or is no longer needed.</strong></p>
+<p><code>pop_front</code> shows the same care from the other side. It saves the address of the doomed node, moves the head past it, and only then deletes it.</p>
+<p>No element was moved in either function. The cost is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>, regardless of the list’s length.</p>
+</section>
+<section id="sec:traversal" class="level3 unnumbered">
+<h3 class="unnumbered">Walking the list</h3>
+<div class="listing"><div class="listing-file">code/ch04/list.hpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> contains<span class="op">(</span><span class="at">const</span> T<span class="op">&amp;</span> value<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> Node<span class="op">*</span> p <span class="op">=</span> <span class="va">head_</span><span class="op">;</span> p <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">;</span> p <span class="op">=</span> p<span class="op">-&gt;</span>next<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>p<span class="op">-&gt;</span>value <span class="op">==</span> value<span class="op">)</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>This <code>for</code> loop is the idiom for visiting every node, and you will write it hundreds of times: start <code>p</code> at the head; continue while <code>p</code> is not null; advance with <code>p = p-&gt;next</code>. Compare it with the loop over an array, <code>for (i = 0; i &lt; n; ++i)</code>. They have the same shape. Only the meaning of “the next one” differs.</p>
+<p>Here is the price of linking. To reach the element at position <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> there is no arithmetic to do; you must walk <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> links from the head. Access by index is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>, which also rules out binary search: there is no cheap way to jump to the middle.</p>
+</section>
+<section id="sec:list-dtor" class="level3 unnumbered">
+<h3 class="unnumbered">Destroying a list</h3>
+<p>A list owns its nodes, so its destructor must delete every one.</p>
+<div class="listing"><div class="listing-file">code/ch04/list.hpp</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="op">~</span>List<span class="op">()</span> <span class="op">{</span> clear<span class="op">();</span> <span class="op">}</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> clear<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="va">head_</span> <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        Node<span class="op">*</span> doomed <span class="op">=</span> <span class="va">head_</span><span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">head_</span> <span class="op">=</span> <span class="va">head_</span><span class="op">-&gt;</span>next<span class="op">;</span>   <span class="co">// step forward BEFORE deleting</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">delete</span> doomed<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="va">size_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The loop must read <code>head_-&gt;next</code> <em>before</em> deleting the node, because afterward the node’s contents no longer exist. Writing <code>delete head_; head_ = head_-&gt;next;</code> is a use-after-free, and a very common one.</p>
+<p>The copy constructor, similarly, must make a new node for every node of the original. It keeps a pointer to the last node of the copy so that each new node can be attached in constant time. It builds the copy in a local <code>List</code> and swaps at the end, for a reason worth a moment: if an allocation fails halfway through, the half-built chain belongs to the local variable, whose destructor frees it. Built directly in the object under construction, those nodes would leak, because a destructor does not run for an object whose constructor did not finish.</p>
+<div class="listing"><div class="listing-file">code/ch04/list.hpp</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>List<span class="op">(</span><span class="at">const</span> List<span class="op">&amp;</span> other<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    List copy<span class="op">;</span>              <span class="co">// owns the new nodes until we are finished</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> tail <span class="op">=</span> <span class="kw">nullptr</span><span class="op">;</span>   <span class="co">// last node of the copy so far</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>Node<span class="op">*</span> p <span class="op">=</span> other<span class="op">.</span><span class="va">head_</span><span class="op">;</span> p <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">;</span> p <span class="op">=</span> p<span class="op">-&gt;</span>next<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        Node<span class="op">*</span> fresh <span class="op">=</span> <span class="kw">new</span> Node<span class="op">{</span>p<span class="op">-&gt;</span>value<span class="op">,</span> <span class="kw">nullptr</span><span class="op">};</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>tail <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> copy<span class="op">.</span><span class="va">head_</span> <span class="op">=</span> fresh<span class="op">;</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span> tail<span class="op">-&gt;</span>next <span class="op">=</span> fresh<span class="op">;</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>        tail <span class="op">=</span> fresh<span class="op">;</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">++</span>copy<span class="op">.</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>swap<span class="op">(</span><span class="va">head_</span><span class="op">,</span> copy<span class="op">.</span><span class="va">head_</span><span class="op">);</span>   <span class="co">// take the finished chain</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>swap<span class="op">(</span><span class="va">size_</span><span class="op">,</span> copy<span class="op">.</span><span class="va">size_</span><span class="op">);</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>With the destructor, this copy constructor, a move constructor that steals the head pointer, and a by-value assignment operator like the one in <code>Vec</code>, the list follows the rule of five. The complete class is in <code>code/ch04/list.hpp</code>.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 4.2</span></p>
+<p>The copy constructor walks the original list with <code>p</code> and builds the copy by adding each new node at the <em>end</em>. Why not use <code>push_front</code> for each element, which would be simpler?</p>
+<details class="answer"><summary>Answer</summary>
+<p>Pushing each element onto the front as you walk the original would produce a copy in <em>reverse</em> order. You could reverse it afterward, or keep a tail pointer as the code does.</p>
+</details>
+</aside>
+</section>
+</section>
+<section id="sec:rewiring" class="level2">
+<h2><span class="secnum">4.2</span> Rewiring</h2>
+<p>The characteristic operations on a linked list are not about moving data. They are about changing which node points to which. This is delicate work, and the only reliable way to do it is with a picture.</p>
+<section id="sec:list-remove" class="level3 unnumbered">
+<h3 class="unnumbered">Removing a node</h3>
+<p>To remove a node from the middle of a singly linked list, the node <em>before</em> it must be made to point to the node <em>after</em> it. So as we search for the node to remove, we must keep track of its predecessor.</p>
+<div class="listing"><div class="listing-file">code/ch04/list.hpp</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Removes the first node holding `value`. Returns whether one was found.</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> remove<span class="op">(</span><span class="at">const</span> T<span class="op">&amp;</span> value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> prev <span class="op">=</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> cur <span class="op">=</span> <span class="va">head_</span><span class="op">;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>cur <span class="op">!=</span> <span class="kw">nullptr</span> <span class="op">&amp;&amp;</span> <span class="op">!(</span>cur<span class="op">-&gt;</span>value <span class="op">==</span> value<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        prev <span class="op">=</span> cur<span class="op">;</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        cur <span class="op">=</span> cur<span class="op">-&gt;</span>next<span class="op">;</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>cur <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span>            <span class="co">// not found</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>prev <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="va">head_</span> <span class="op">=</span> cur<span class="op">-&gt;</span>next<span class="op">;</span>      <span class="co">// removing the first node</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span> prev<span class="op">-&gt;</span>next <span class="op">=</span> cur<span class="op">-&gt;</span>next<span class="op">;</span>                 <span class="co">// route around cur</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span> cur<span class="op">;</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">--</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<figure class="fig" id="fig:list-remove"><svg class="figsvg" viewBox="0 0 640 250" width="640" height="250" role="img" aria-label="Removing a node by pointing its predecessor at its successor." xmlns="http://www.w3.org/2000/svg">
+<text class="t-ink b" x="30.0" y="18.0" text-anchor="start" dominant-baseline="central" font-size="12">after the search</text>
+<text class="t-ink mono b" x="52.0" y="36.0" text-anchor="middle" dominant-baseline="central" font-size="13">head</text>
+<rect class="s-ink f-muted-soft" x="30" y="48" width="44" height="34" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="52" cy="65" r="2.8" stroke-width="1.3"/>
+<rect class="s-ink f-accent-soft" x="120" y="48" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="172.1" y1="48.0" x2="172.1" y2="82.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="146.0" y="65.0" text-anchor="middle" dominant-baseline="central" font-size="14">10</text>
+<circle class="s-ink f-ink" cx="188.04" cy="65.0" r="2.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="52.0" y1="65.0" x2="112.0" y2="65.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="118.0,65.0 109.0,61.4 109.0,68.6"/>
+<rect class="s-ink f-accent-soft" x="250" y="48" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="302.1" y1="48.0" x2="302.1" y2="82.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="276.0" y="65.0" text-anchor="middle" dominant-baseline="central" font-size="14">20</text>
+<circle class="s-ink f-ink" cx="318.03999999999996" cy="65.0" r="2.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="188.0" y1="65.0" x2="242.0" y2="65.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="248.0,65.0 239.0,61.4 239.0,68.6"/>
+<rect class="s-ink f-accent-soft" x="380" y="48" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="432.1" y1="48.0" x2="432.1" y2="82.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="406.0" y="65.0" text-anchor="middle" dominant-baseline="central" font-size="14">30</text>
+<circle class="s-ink f-ink" cx="448.03999999999996" cy="65.0" r="2.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="318.0" y1="65.0" x2="372.0" y2="65.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="378.0,65.0 369.0,61.4 369.0,68.6"/>
+<rect class="s-ink f-accent-soft" x="510" y="48" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="562.1" y1="48.0" x2="562.1" y2="82.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="536.0" y="65.0" text-anchor="middle" dominant-baseline="central" font-size="14">40</text>
+<line class="s-muted f-none" x1="565.1" y1="79.0" x2="591.0" y2="51.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="448.0" y1="65.0" x2="502.0" y2="65.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="508.0,65.0 499.0,61.4 499.0,68.6"/>
+<line class="s-accent2 f-none" x1="146.0" y1="112.0" x2="146.0" y2="94.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="146.0,88.0 142.4,97.0 149.6,97.0"/>
+<text class="t-accent2 mono b" x="146.0" y="122.0" text-anchor="middle" dominant-baseline="central" font-size="13">prev</text>
+<line class="s-accent2 f-none" x1="276.0" y1="112.0" x2="276.0" y2="94.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="276.0,88.0 272.4,97.0 279.6,97.0"/>
+<text class="t-accent2 mono b" x="276.0" y="122.0" text-anchor="middle" dominant-baseline="central" font-size="13">cur</text>
+<text class="t-ink b" x="30.0" y="150.0" text-anchor="start" dominant-baseline="central" font-size="12">after  prev-&gt;next = cur-&gt;next;  delete cur;</text>
+<text class="t-ink mono b" x="52.0" y="178.0" text-anchor="middle" dominant-baseline="central" font-size="13">head</text>
+<rect class="s-ink f-muted-soft" x="30" y="190" width="44" height="34" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="52" cy="207" r="2.8" stroke-width="1.3"/>
+<rect class="s-ink f-accent-soft" x="120" y="190" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="172.1" y1="190.0" x2="172.1" y2="224.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="146.0" y="207.0" text-anchor="middle" dominant-baseline="central" font-size="14">10</text>
+<circle class="s-ink f-ink" cx="188.04" cy="207.0" r="2.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="52.0" y1="207.0" x2="112.0" y2="207.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="118.0,207.0 109.0,203.4 109.0,210.6"/>
+<rect class="s-bad f-bad-soft" x="250" y="190" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-bad f-none" x1="302.1" y1="190.0" x2="302.1" y2="224.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="276.0" y="207.0" text-anchor="middle" dominant-baseline="central" font-size="14">20</text>
+<circle class="s-ink f-ink" cx="318.03999999999996" cy="207.0" r="2.6" stroke-width="1.3"/>
+<rect class="s-ink f-accent-soft" x="380" y="190" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="432.1" y1="190.0" x2="432.1" y2="224.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="406.0" y="207.0" text-anchor="middle" dominant-baseline="central" font-size="14">30</text>
+<circle class="s-ink f-ink" cx="448.03999999999996" cy="207.0" r="2.6" stroke-width="1.3"/>
+<path class="s-good f-none" d="M188.0,207.0 Q284.0,154.0 386.0,188.0" stroke-width="1.8"/>
+<polygon class="s-none f-good" points="386.0,188.0 378.6,181.7 376.3,188.6"/>
+<rect class="s-ink f-accent-soft" x="510" y="190" width="84" height="34" rx="0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="562.1" y1="190.0" x2="562.1" y2="224.0" stroke-width="1.3"/>
+<text class="t-ink mono" x="536.0" y="207.0" text-anchor="middle" dominant-baseline="central" font-size="14">40</text>
+<line class="s-muted f-none" x1="565.1" y1="221.0" x2="591.0" y2="193.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="448.0" y1="207.0" x2="502.0" y2="207.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="508.0,207.0 499.0,203.4 499.0,210.6"/>
+<line class="s-muted f-none dash" x1="318.0" y1="207.0" x2="372.0" y2="207.0" stroke-width="1.3"/>
+<polygon class="s-none f-muted" points="378.0,207.0 369.0,203.4 369.0,210.6"/>
+<text class="t-bad i" x="292.0" y="240.0" text-anchor="middle" dominant-baseline="central" font-size="11">deleted</text>
+</svg><figcaption>
+<span class="fignum">Figure 4.2</span> Removing the node holding 20. The search stops with <code>cur</code> at the doomed node and <code>prev</code> one behind it. A single assignment, <code>prev-&gt;next = cur-&gt;next</code>, routes the list around the node, which can then be deleted.
+</figcaption></figure>
+<p>The loop advances <code>prev</code> and <code>cur</code> in step until <code>cur</code> reaches the node to remove or runs off the end. Then there are three cases. If <code>cur</code> is null the value was not found. If <code>prev</code> is null then <code>cur</code> is the first node, which has no predecessor; the pointer that must change is <code>head_</code> itself. Otherwise the pointer that must change is <code>prev-&gt;next</code>, as in <a href="#fig:list-remove">Figure 4.2</a>.</p>
+<p>That middle case, the special treatment of the first node, is the nuisance of singly linked lists. The first node is reached through <code>head_</code> and every other node is reached through some node’s <code>next</code>, so code that changes “the pointer that leads to this node” has to ask which kind it is dealing with.</p>
+</section>
+<section id="sec:list-reverse" class="level3 unnumbered">
+<h3 class="unnumbered">Reversing a list</h3>
+<p>A classic exercise, worth doing because it is pure pointer manipulation: reverse a list in place, without allocating anything, by turning every arrow around.</p>
+<div class="listing"><div class="listing-file">code/ch04/list.hpp</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Reverses the list in place by re-aiming every next pointer.</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> reverse<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> done <span class="op">=</span> <span class="kw">nullptr</span><span class="op">;</span>      <span class="co">// the already-reversed part</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> cur <span class="op">=</span> <span class="va">head_</span><span class="op">;</span>         <span class="co">// the part still to do</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>cur <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        Node<span class="op">*</span> rest <span class="op">=</span> cur<span class="op">-&gt;</span>next<span class="op">;</span>   <span class="co">// remember where to go next</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        cur<span class="op">-&gt;</span>next <span class="op">=</span> done<span class="op">;</span>         <span class="co">// flip this node&#39;s pointer</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        done <span class="op">=</span> cur<span class="op">;</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        cur <span class="op">=</span> rest<span class="op">;</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="va">head_</span> <span class="op">=</span> done<span class="op">;</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The loop maintains an invariant: <code>done</code> is the head of a correctly reversed list containing the nodes processed so far, and <code>cur</code> is the head of the remaining, untouched part. Each step detaches the first node of the remaining part and attaches it to the front of the reversed part. The first line of the loop body is the one people forget. It saves <code>cur-&gt;next</code> before the second line overwrites it.</p>
+<aside class="callout byhand"><p class="callout-title"><span class="lab">By hand first</span></p>
+<p>Take a sheet of paper. Draw a list of four nodes as boxes with arrows, and draw <code>done</code>, <code>cur</code>, and <code>rest</code> as labeled arrows. Execute <code>reverse</code> by hand, one statement at a time, crossing out and redrawing arrows as they change. Then do the same for <code>remove</code>, once for a node in the middle, once for the first node, and once for a value that is not present.</p>
+<p>This is not optional busywork, and it cannot be delegated. Pointer rewiring is the one skill in this course that is almost entirely <em>visual and manual</em>: people who can do it see the boxes and arrows in their heads, and they got that way by drawing them on paper many times. A model can produce a correct <code>reverse</code> instantly. What it cannot do is install the picture in your head, and you will need that picture for trees in two weeks.</p>
+</aside>
+</section>
+<section id="sec:link-trick" class="level3 unnumbered">
+<h3 class="unnumbered">Pointers to pointers</h3>
+<p>There is a neat way to make the first node’s special case disappear. In <code>remove</code>, the thing that needs to change is always a <code>Node*</code>: sometimes the one named <code>head_</code>, sometimes the one named <code>next</code> inside some node. A pointer is an object like any other, with an address of its own. So keep track of <em>the address of the pointer that leads to the current node</em>.</p>
+<div class="listing"><div class="listing-file">code/ch04/list.hpp</div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Precondition: the list is in increasing order. Inserts value in order.</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> insert_sorted<span class="op">(</span>T value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">**</span> link <span class="op">=</span> <span class="op">&amp;</span><span class="va">head_</span><span class="op">;</span>   <span class="co">// the pointer we might need to change</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(*</span>link <span class="op">!=</span> <span class="kw">nullptr</span> <span class="op">&amp;&amp;</span> <span class="op">(*</span>link<span class="op">)-&gt;</span>value <span class="op">&lt;</span> value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        link <span class="op">=</span> <span class="op">&amp;(*</span>link<span class="op">)-&gt;</span>next<span class="op">;</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>link <span class="op">=</span> <span class="kw">new</span> Node<span class="op">{</span><span class="bu">std::</span>move<span class="op">(</span>value<span class="op">),</span> <span class="op">*</span>link<span class="op">};</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Here <code>link</code> has type <code>Node**</code>, pointer to pointer to node. It begins by pointing at <code>head_</code>. Each step of the loop re-aims it at the <code>next</code> member of the following node. Whenever the loop stops, <code>*link</code> is the pointer that must be changed to splice in the new node, whether that happens to be the head or a <code>next</code> field, and the code does not need to know which. The new node’s <code>next</code> is set to the old value of <code>*link</code>, and <code>*link</code> is then set to the new node.</p>
+<p>This technique is more abstract than the <code>prev</code>/<code>cur</code> version, and you are free to prefer the latter. But it will come back in <a href="06-trees.html">Chapter 6</a>, where the “pointer that leads to this node” is the natural thing to pass to a recursive function.</p>
+</section>
+<section id="sec:list-iter" class="level3 unnumbered">
+<h3 class="unnumbered">Iterating</h3>
+<p>A vector’s iterator was a plain pointer, because advancing a pointer moves to the next element of a contiguous block. In a list the next element is wherever <code>next</code> says it is, so the iterator must be a small class that knows how to follow a link.</p>
+<div class="listing"><div class="listing-file">code/ch04/list.hpp</div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Iterator <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> Iterator<span class="op">(</span>Node<span class="op">*</span> node<span class="op">)</span> <span class="op">:</span> <span class="va">node_</span><span class="op">(</span>node<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    T<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">*()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">node_</span><span class="op">-&gt;</span>value<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    Iterator<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">++()</span> <span class="op">{</span>     <span class="co">// advance: follow the link</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">node_</span> <span class="op">=</span> <span class="va">node_</span><span class="op">-&gt;</span>next<span class="op">;</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> <span class="kw">operator</span><span class="op">==(</span><span class="at">const</span> Iterator<span class="op">&amp;</span> other<span class="op">)</span> <span class="at">const</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> <span class="va">node_</span><span class="op">;</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>Iterator begin<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> Iterator<span class="op">(</span><span class="va">head_</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>Iterator end<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> Iterator<span class="op">(</span><span class="kw">nullptr</span><span class="op">);</span> <span class="op">}</span></span></code></pre></div>
+</div>
+<p>The iterator wraps a node pointer. Dereferencing it gives the node’s value; incrementing it follows <code>next</code>; the end iterator wraps a null pointer. With <code>begin()</code> and <code>end()</code> in place, a range-<code>for</code> loop works on our list exactly as on a vector:</p>
+<div class="listing"><div class="listing-file">code/ch04/list_test.cpp</div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>List<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">&gt;</span> todo<span class="op">;</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>todo<span class="op">.</span>push_front<span class="op">(</span><span class="st">&quot;sleep&quot;</span><span class="op">);</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>todo<span class="op">.</span>push_front<span class="op">(</span><span class="st">&quot;debug&quot;</span><span class="op">);</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>todo<span class="op">.</span>push_front<span class="op">(</span><span class="st">&quot;code&quot;</span><span class="op">);</span>          <span class="co">// code -&gt; debug -&gt; sleep</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>string all<span class="op">;</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> item <span class="op">:</span> todo<span class="op">)</span> all <span class="op">+=</span> item <span class="op">+</span> <span class="ch">&#39; &#39;</span><span class="op">;</span></span></code></pre></div>
+</div>
+<p>Code that uses the loop cannot tell whether it is walking a contiguous block or chasing pointers across the heap. That is the point of iterators: one interface, many arrangements of memory. The difference shows up in what the iterator <em>can</em> do. A vector’s iterator can jump (<code>it + 500</code>) in constant time; a list’s can only step. The standard library classifies iterators by these abilities. An algorithm that must jump, such as <code>std::sort</code>, requires the stronger kind and will not compile for a list. Binary search will accept a list’s iterators, but it has to step where it would have jumped, which throws away the point of it.</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Finding the bug in a broken linked-list function is excellent practice, and a model can supply an endless stream of broken functions.</p>
+<blockquote>
+<p>Write a C++ function that operates on a singly linked list (insert, remove, reverse, or similar) and contains exactly one subtle pointer bug. Do not tell me what the bug is or hint at where it is. I will find it by drawing the list and tracing your code, and then you can tell me whether I am right.</p>
+</blockquote>
+<p>Find the bug with pencil and paper, not by running the code. When you think you have it, state a specific list and call that triggers it. That is what distinguishes having found the bug from having a feeling about a line.</p>
+</aside>
+</section>
+</section>
+<section id="sec:dlist" class="level2">
+<h2><span class="secnum">4.3</span> Doubly linked lists and sentinels</h2>
+<p>A singly linked list can be walked in one direction only, and removing a node requires access to its predecessor. Give each node a second pointer, to the <em>previous</em> node, and both limitations go away: the list can be walked backward, and a node can be removed given nothing but its own address, since it knows both of its neighbors.</p>
+<p>The cost is another eight bytes per node and twice as many pointers to keep consistent. With the obvious representation (a head pointer, a tail pointer, null at both ends), every operation sprouts special cases: is this the first node? The last? The only one?</p>
+<p>There is a classic trick that removes all of them. Add one extra node, a <strong>sentinel</strong>, that holds no element and is never removed, and join the list into a ring: the sentinel’s <code>next</code> is the first real node, and its <code>prev</code> is the last. An empty list is a sentinel pointing to itself.</p>
+<figure class="fig" id="fig:dlist"><svg class="figsvg" viewBox="0 0 640 190" width="640" height="190" role="img" aria-label="A circular doubly linked list with a sentinel node." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-muted f-muted-soft" x="70" y="78" width="70" height="36" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-accent-soft" x="220" y="78" width="70" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="255.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="14">A</text>
+<rect class="s-ink f-accent-soft" x="370" y="78" width="70" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="405.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="14">B</text>
+<rect class="s-ink f-accent-soft" x="520" y="78" width="70" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="555.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="14">C</text>
+<text class="t-muted i" x="105.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="11">sentinel</text>
+<line class="s-ink f-none" x1="140.0" y1="89.0" x2="213.0" y2="89.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="219.0,89.0 210.0,85.4 210.0,92.6"/>
+<line class="s-accent2 f-none" x1="220.0" y1="103.0" x2="147.0" y2="103.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="141.0,103.0 150.0,106.6 150.0,99.4"/>
+<line class="s-ink f-none" x1="290.0" y1="89.0" x2="363.0" y2="89.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="369.0,89.0 360.0,85.4 360.0,92.6"/>
+<line class="s-accent2 f-none" x1="370.0" y1="103.0" x2="297.0" y2="103.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="291.0,103.0 300.0,106.6 300.0,99.4"/>
+<line class="s-ink f-none" x1="440.0" y1="89.0" x2="513.0" y2="89.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="519.0,89.0 510.0,85.4 510.0,92.6"/>
+<line class="s-accent2 f-none" x1="520.0" y1="103.0" x2="447.0" y2="103.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="441.0,103.0 450.0,106.6 450.0,99.4"/>
+<path class="s-ink f-none" d="M555.0,78.0 Q320.0,-8.0 105.0,76.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="105.0,76.0 114.7,76.1 112.1,69.4"/>
+<path class="s-accent2 f-none" d="M105.0,114.0 Q320.0,200.0 555.0,116.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="555.0,116.0 545.3,115.6 547.7,122.4"/>
+<text class="t-ink mono" x="320.0" y="22.0" text-anchor="middle" dominant-baseline="central" font-size="11">next</text>
+<text class="t-accent2 mono" x="320.0" y="170.0" text-anchor="middle" dominant-baseline="central" font-size="11">prev</text>
+<text class="t-muted" x="255.0" y="128.0" text-anchor="middle" dominant-baseline="central" font-size="10">front</text>
+<text class="t-muted" x="555.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="10">back</text>
+</svg><figcaption>
+<span class="fignum">Figure 4.3</span> A doubly linked list of three elements with a sentinel. Every node, including the sentinel, has a valid <code>prev</code> and <code>next</code>, so there are no null pointers and no special cases at the ends. The sentinel doubles as the “one past the end” position.
+</figcaption></figure>
+<p>Now <em>every</em> real node has a real node or the sentinel on each side. No pointer in the structure is ever null. Insertion becomes four pointer assignments and removal two, with no conditionals in either.</p>
+<div class="listing"><div class="listing-file">code/ch04/dlist.hpp</div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Inserts value just before pos. Returns an iterator to the new node.</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>Iterator insert<span class="op">(</span>Iterator pos<span class="op">,</span> T value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> after <span class="op">=</span> pos<span class="op">.</span><span class="va">node_</span><span class="op">;</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> before <span class="op">=</span> after<span class="op">-&gt;</span>prev<span class="op">;</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> fresh <span class="op">=</span> <span class="kw">new</span> Node<span class="op">{</span><span class="bu">std::</span>move<span class="op">(</span>value<span class="op">),</span> before<span class="op">,</span> after<span class="op">};</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    before<span class="op">-&gt;</span>next <span class="op">=</span> fresh<span class="op">;</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    after<span class="op">-&gt;</span>prev <span class="op">=</span> fresh<span class="op">;</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Iterator<span class="op">(</span>fresh<span class="op">);</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="co">// Removes the node at pos. Returns an iterator to the node after it.</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>Iterator erase<span class="op">(</span>Iterator pos<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> doomed <span class="op">=</span> pos<span class="op">.</span><span class="va">node_</span><span class="op">;</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(</span>doomed <span class="op">!=</span> <span class="va">sentinel_</span><span class="op">);</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> after <span class="op">=</span> doomed<span class="op">-&gt;</span>next<span class="op">;</span></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>    doomed<span class="op">-&gt;</span>prev<span class="op">-&gt;</span>next <span class="op">=</span> after<span class="op">;</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>    after<span class="op">-&gt;</span>prev <span class="op">=</span> doomed<span class="op">-&gt;</span>prev<span class="op">;</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span> doomed<span class="op">;</span></span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">--</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Iterator<span class="op">(</span>after<span class="op">);</span></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Trace <code>insert</code> on an empty list, where <code>pos</code> is <code>end()</code>, the sentinel. Then <code>after</code> and <code>before</code> are <em>both</em> the sentinel, and the four assignments correctly produce a ring of two nodes. The empty-list case, usually the most bug-prone, simply works. Every other operation is a one-line call to one of these two.</p>
+<div class="listing"><div class="listing-file">code/ch04/dlist.hpp</div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> push_front<span class="op">(</span>T value<span class="op">)</span> <span class="op">{</span> insert<span class="op">(</span>begin<span class="op">(),</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">));</span> <span class="op">}</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> push_back<span class="op">(</span>T value<span class="op">)</span> <span class="op">{</span> insert<span class="op">(</span>end<span class="op">(),</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">));</span> <span class="op">}</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> pop_front<span class="op">()</span> <span class="op">{</span> erase<span class="op">(</span>begin<span class="op">());</span> <span class="op">}</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> pop_back<span class="op">()</span> <span class="op">{</span> erase<span class="op">(</span>Iterator<span class="op">(</span><span class="va">sentinel_</span><span class="op">-&gt;</span>prev<span class="op">));</span> <span class="op">}</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>T<span class="op">&amp;</span> front<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">sentinel_</span><span class="op">-&gt;</span>next<span class="op">-&gt;</span>value<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>T<span class="op">&amp;</span> back<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">sentinel_</span><span class="op">-&gt;</span>prev<span class="op">-&gt;</span>value<span class="op">;</span> <span class="op">}</span></span></code></pre></div>
+</div>
+<p>Since position is represented by an iterator, the list hands out iterators and takes them back as arguments. The iterator for a doubly linked list can step backward as well as forward.</p>
+<div class="listing"><div class="listing-file">code/ch04/dlist.hpp</div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Iterator <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    T<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">*()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">node_</span><span class="op">-&gt;</span>value<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    Iterator<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">++()</span> <span class="op">{</span> <span class="va">node_</span> <span class="op">=</span> <span class="va">node_</span><span class="op">-&gt;</span>next<span class="op">;</span> <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    Iterator<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">--()</span> <span class="op">{</span> <span class="va">node_</span> <span class="op">=</span> <span class="va">node_</span><span class="op">-&gt;</span>prev<span class="op">;</span> <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> <span class="kw">operator</span><span class="op">==(</span><span class="at">const</span> Iterator<span class="op">&amp;</span> other<span class="op">)</span> <span class="at">const</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">friend</span> <span class="kw">class</span> DList<span class="op">;</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> Iterator<span class="op">(</span>Node<span class="op">*</span> node<span class="op">)</span> <span class="op">:</span> <span class="va">node_</span><span class="op">(</span>node<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">*</span> <span class="va">node_</span><span class="op">;</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>Iterator begin<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> Iterator<span class="op">(</span><span class="va">sentinel_</span><span class="op">-&gt;</span>next<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>Iterator end<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> Iterator<span class="op">(</span><span class="va">sentinel_</span><span class="op">);</span> <span class="op">}</span></span></code></pre></div>
+</div>
+<p>One more piece of C++ appears in this class.</p>
+<div class="listing"><div class="listing-file">code/ch04/dlist.hpp</div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co">// An empty list is a sentinel whose prev and next point to itself.</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>DList<span class="op">()</span> <span class="op">:</span> <span class="va">sentinel_</span><span class="op">(</span><span class="kw">new</span> Node<span class="op">{</span>T<span class="op">{},</span> <span class="kw">nullptr</span><span class="op">,</span> <span class="kw">nullptr</span><span class="op">})</span> <span class="op">{</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="va">sentinel_</span><span class="op">-&gt;</span>prev <span class="op">=</span> <span class="va">sentinel_</span><span class="op">;</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="va">sentinel_</span><span class="op">-&gt;</span>next <span class="op">=</span> <span class="va">sentinel_</span><span class="op">;</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="op">~</span>DList<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(!</span>empty<span class="op">())</span> pop_front<span class="op">();</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span> <span class="va">sentinel_</span><span class="op">;</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>DList<span class="op">(</span><span class="at">const</span> DList<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span><span class="op">;</span>              <span class="co">// this class cannot be copied</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>DList<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="at">const</span> DList<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span><span class="op">;</span></span></code></pre></div>
+</div>
+<p>The two lines ending in <code>= delete</code> declare that a <code>DList</code> cannot be copied: any attempt is a compile-time error. This is a respectable third option under the rule of five. A class that owns a resource must either copy it correctly or refuse to be copied. What it must not do is let the compiler’s member-by-member default through.</p>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>The standard library has both kinds of list: <code>std::forward_list</code> (singly linked) and <code>std::list</code> (doubly linked, implemented with a sentinel much as here). <code>std::list</code> offers one operation that no array-based container can match: <code>splice</code>, which moves a node, or the entire contents of a list, into another list in constant time, without copying or even touching the elements. It also guarantees that iterators and references to an element stay valid until that element is erased, no matter what else is inserted or removed. Contrast that with the invalidation rules for vectors in <a href="03-vector.html#sec:templates">Section 3.5</a>. Those two properties, and not raw speed, are the reasons to choose <code>std::list</code> when you do. <a href="10-wild.html">Chapter 10</a> builds a cache that depends on both.</p>
+</aside>
+</section>
+<section id="sec:stacks-queues" class="level2">
+<h2><span class="secnum">4.4</span> Stacks and queues</h2>
+<p>So far we have described containers by how they are built. It is often more useful to describe them by what they <em>do</em>. An <strong>abstract data type</strong>, or ADT, is a specification of a set of operations and their behavior, with nothing said about how the data is stored <span class="citation" data-cites="liskov1974">(<a href="#ref-liskov1974" role="doc-biblioref">Liskov and Zilles 1974</a>)</span>. An ADT answers the book’s second question, <em>what does it promise?</em>, and deliberately declines to answer the first. The same ADT can be implemented by several data structures with different costs, and code written against the ADT does not care which.</p>
+<p>The two simplest ADTs restrict a sequence so that elements can be added and removed only at its ends.</p>
+<section id="sec:stack" class="level3 unnumbered">
+<h3 class="unnumbered">Stacks</h3>
+<p>A <strong>stack</strong> allows insertion and removal at one end only, called the top. The last element pushed is the first one popped: <em>last in, first out</em>, or LIFO.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>push(x)</code></td>
+<td style="text-align: left;">add <code>x</code> to the top</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>pop()</code></td>
+<td style="text-align: left;">remove the top element</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>top()</code></td>
+<td style="text-align: left;">look at the top element</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>empty()</code></td>
+<td style="text-align: left;">is the stack empty?</td>
+</tr>
+</tbody>
+</table>
+<p>Which data structure should implement it? A vector’s cheap end is its back, so let the back be the top.</p>
+<div class="listing"><div class="listing-file">code/ch04/stack_queue.hpp</div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Last in, first out. All the work is done by the vector underneath.</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Stack <span class="op">{</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> push<span class="op">(</span>T value<span class="op">)</span> <span class="op">{</span> <span class="va">items_</span><span class="op">.</span>push_back<span class="op">(</span><span class="bu">std::</span>move<span class="op">(</span>value<span class="op">));</span> <span class="op">}</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> pop<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="ot">assert</span><span class="op">(!</span><span class="va">items_</span><span class="op">.</span>empty<span class="op">());</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">items_</span><span class="op">.</span>pop_back<span class="op">();</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    T<span class="op">&amp;</span> top<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>        <span class="ot">assert</span><span class="op">(!</span><span class="va">items_</span><span class="op">.</span>empty<span class="op">());</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">items_</span><span class="op">.</span>back<span class="op">();</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> empty<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">items_</span><span class="op">.</span>empty<span class="op">();</span> <span class="op">}</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t size<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">items_</span><span class="op">.</span>size<span class="op">();</span> <span class="op">}</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="va">items_</span><span class="op">;</span></span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<p>The class is called an <em>adapter</em>: it adds nothing but a narrower interface. Every operation is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> (amortized, for <code>push</code>). Notice also that it declares no destructor and no copy operations: its only member is a <code>vector</code>, which manages itself. That is the rule of zero from <a href="03-vector.html#sec:move">Section 3.4</a> at work. (A singly linked list would serve too, with the head as the top, but it would pay for a heap allocation on every push.) The standard library’s version is <code>std::stack</code>.</p>
+<p>You have already met the most important stack in computing. The call stack of <a href="01-memory.html#sec:lifetimes">Section 1.5</a> is one: calling a function pushes a frame, returning pops it, and the function that returns is always the most recently called. Stacks turn up wherever things nest: function calls, parentheses, HTML tags, undo histories.</p>
+<p>Here is a small, typical application. A compiler, or your editor, needs to check that brackets are balanced. Every closing bracket must match the <em>most recent</em> unclosed opening bracket. “Most recent” is the signature of a stack.</p>
+<div class="listing"><div class="listing-file">code/ch04/brackets.cpp</div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Are the brackets in s properly matched and nested?</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> balanced<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>stack<span class="op">&lt;</span><span class="dt">char</span><span class="op">&gt;</span> open<span class="op">;</span>   <span class="co">// the brackets still waiting to be closed</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">char</span> c <span class="op">:</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>c <span class="op">==</span> <span class="ch">&#39;(&#39;</span> <span class="op">||</span> c <span class="op">==</span> <span class="ch">&#39;[&#39;</span> <span class="op">||</span> c <span class="op">==</span> <span class="ch">&#39;{&#39;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>            open<span class="op">.</span>push<span class="op">(</span>c<span class="op">);</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>c <span class="op">==</span> <span class="ch">&#39;)&#39;</span> <span class="op">||</span> c <span class="op">==</span> <span class="ch">&#39;]&#39;</span> <span class="op">||</span> c <span class="op">==</span> <span class="ch">&#39;}&#39;</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>open<span class="op">.</span>empty<span class="op">())</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span>          <span class="co">// nothing to close</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>            <span class="dt">char</span> o <span class="op">=</span> open<span class="op">.</span>top<span class="op">();</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>            open<span class="op">.</span>pop<span class="op">();</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>            <span class="dt">bool</span> match <span class="op">=</span> <span class="op">(</span>o <span class="op">==</span> <span class="ch">&#39;(&#39;</span> <span class="op">&amp;&amp;</span> c <span class="op">==</span> <span class="ch">&#39;)&#39;</span><span class="op">)</span> <span class="op">||</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>                         <span class="op">(</span>o <span class="op">==</span> <span class="ch">&#39;[&#39;</span> <span class="op">&amp;&amp;</span> c <span class="op">==</span> <span class="ch">&#39;]&#39;</span><span class="op">)</span> <span class="op">||</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>                         <span class="op">(</span>o <span class="op">==</span> <span class="ch">&#39;{&#39;</span> <span class="op">&amp;&amp;</span> c <span class="op">==</span> <span class="ch">&#39;}&#39;</span><span class="op">);</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(!</span>match<span class="op">)</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span>                <span class="co">// wrong kind</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> open<span class="op">.</span>empty<span class="op">();</span>                             <span class="co">// anything left unclosed?</span></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 4.3</span></p>
+<p>Trace <code>balanced</code> on the string <code>"([)]"</code>. At which character does it return, and why?</p>
+<details class="answer"><summary>Answer</summary>
+<p>It pushes <code>(</code>, then pushes <code>[</code>. At <code>)</code> it pops the top, which is <code>[</code>. That does not match <code>)</code>, so it returns <code>false</code> at the third character. The count of each kind of bracket is right, but the nesting is wrong, and a stack is exactly what detects nesting.</p>
+</details>
+</aside>
+</section>
+<section id="sec:queue" class="level3 unnumbered">
+<h3 class="unnumbered">Queues</h3>
+<p>A <strong>queue</strong> adds at one end, the back, and removes from the other, the front: <em>first in, first out</em>, or FIFO. It is a line at a counter. Queues model anything that must be handled in order of arrival: print jobs, network packets, tasks waiting for a processor, and, as <a href="09-graphs.html">Chapter 9</a> will show, the frontier of a breadth-first search.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>push(x)</code></td>
+<td style="text-align: left;">add <code>x</code> at the back</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>pop()</code></td>
+<td style="text-align: left;">remove the front element</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>front()</code></td>
+<td style="text-align: left;">look at the front element</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>empty()</code></td>
+<td style="text-align: left;">is the queue empty?</td>
+</tr>
+</tbody>
+</table>
+<p>A vector is awkward here. Adding at the back is cheap, but removing from the front shifts everything: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> per <code>pop</code>. A singly linked list with an extra pointer to its last node handles both ends in constant time, and that is a perfectly good implementation. But there is a way to get constant-time operations at both ends <em>and</em> keep the elements in a contiguous block.</p>
+<p>The idea: when the front element is removed, do not shift anything. Leave a hole, and remember where the front now is. The occupied part of the block drifts rightward as the queue is used. When it reaches the end of the block, let it wrap around to the beginning, into the space that earlier removals freed. The block is treated as a ring, and the structure is called a <strong>circular buffer</strong> or <strong>ring buffer</strong>.</p>
+<figure class="fig viz" id="fig:ring"><div class="viz-widget" data-viz="ring"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 190" width="640" height="190" role="img" aria-label="A ring buffer of capacity 8: elements at indices 5, 6, 7, 0 and 1." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-accent-soft" x="136" y="70" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="159.0" y="89.0" text-anchor="middle" dominant-baseline="central" font-size="14">60</text>
+<text class="t-muted mono" x="159.0" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-ink f-accent-soft" x="182" y="70" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="205.0" y="89.0" text-anchor="middle" dominant-baseline="central" font-size="14">70</text>
+<text class="t-muted mono" x="205.0" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-ink f-muted-soft" x="228" y="70" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="251.0" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-muted-soft" x="274" y="70" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="297.0" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-muted-soft" x="320" y="70" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="343.0" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-accent2-soft" x="366" y="70" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="389.0" y="89.0" text-anchor="middle" dominant-baseline="central" font-size="14">30</text>
+<text class="t-muted mono" x="389.0" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-accent-soft" x="412" y="70" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="435.0" y="89.0" text-anchor="middle" dominant-baseline="central" font-size="14">40</text>
+<text class="t-muted mono" x="435.0" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-accent-soft" x="458" y="70" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="481.0" y="89.0" text-anchor="middle" dominant-baseline="central" font-size="14">50</text>
+<text class="t-muted mono" x="481.0" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<line class="s-accent2 f-none" x1="389.0" y1="44.0" x2="389.0" y2="60.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="389.0,66.0 392.6,57.0 385.4,57.0"/>
+<text class="t-accent2 b" x="375.0" y="34.0" text-anchor="start" dominant-baseline="central" font-size="12">head = 5 (front)</text>
+<line class="s-accent f-none" x1="251.0" y1="44.0" x2="251.0" y2="60.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent" points="251.0,66.0 254.6,57.0 247.4,57.0"/>
+<text class="t-accent" x="265.0" y="34.0" text-anchor="end" dominant-baseline="central" font-size="12">next push: (5 + 5) % 8 = 2</text>
+<path class="s-muted f-none dash" d="M481.0,132.0 Q320.0,192.0 159.0,132.0" stroke-width="1.3"/>
+<polygon class="s-none f-muted" points="159.0,132.0 166.2,138.5 168.7,131.8"/>
+<text class="t-muted i" x="320.0" y="174.0" text-anchor="middle" dominant-baseline="central" font-size="11">wraps around</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 4.4</span> A ring buffer of capacity eight holding five elements that have wrapped around the end of the block. <code>head</code> is the index of the front element; the back is <code>(head + size) % capacity</code>. In the web edition, push and pop to watch the occupied region travel around the ring.
+</figcaption></figure>
+<div class="listing"><div class="listing-file">code/ch04/stack_queue.hpp</div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co">// First in, first out, in a circular buffer.</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> RingQueue <span class="op">{</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> push<span class="op">(</span>T value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="va">size_</span> <span class="op">==</span> <span class="va">buf_</span><span class="op">.</span>size<span class="op">())</span> grow<span class="op">();</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">buf_</span><span class="op">[(</span><span class="va">head_</span> <span class="op">+</span> <span class="va">size_</span><span class="op">)</span> <span class="op">%</span> <span class="va">buf_</span><span class="op">.</span>size<span class="op">()]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">);</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> pop<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>        <span class="ot">assert</span><span class="op">(</span><span class="va">size_</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">head_</span> <span class="op">=</span> <span class="op">(</span><span class="va">head_</span> <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">%</span> <span class="va">buf_</span><span class="op">.</span>size<span class="op">();</span>   <span class="co">// the front moves; nothing shifts</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">--</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>    T<span class="op">&amp;</span> front<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>        <span class="ot">assert</span><span class="op">(</span><span class="va">size_</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">buf_</span><span class="op">[</span><span class="va">head_</span><span class="op">];</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> empty<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">size_</span> <span class="op">==</span> <span class="dv">0</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t size<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">size_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Move to a buffer twice as big, unwrapping so the front is at index 0.</span></span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> grow<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;</span> bigger<span class="op">(</span><span class="va">buf_</span><span class="op">.</span>empty<span class="op">()</span> <span class="op">?</span> <span class="dv">4</span> <span class="op">:</span> <span class="dv">2</span> <span class="op">*</span> <span class="va">buf_</span><span class="op">.</span>size<span class="op">());</span></span>
+<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="va">size_</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a>            bigger<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span><span class="va">buf_</span><span class="op">[(</span><span class="va">head_</span> <span class="op">+</span> i<span class="op">)</span> <span class="op">%</span> <span class="va">buf_</span><span class="op">.</span>size<span class="op">()]);</span></span>
+<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb17-29"><a href="#cb17-29" aria-hidden="true" tabindex="-1"></a>        <span class="va">buf_</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>bigger<span class="op">);</span></span>
+<span id="cb17-30"><a href="#cb17-30" aria-hidden="true" tabindex="-1"></a>        <span class="va">head_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb17-31"><a href="#cb17-31" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-32"><a href="#cb17-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-33"><a href="#cb17-33" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="va">buf_</span><span class="op">;</span>      <span class="co">// the slots; buf_.size() is the capacity</span></span>
+<span id="cb17-34"><a href="#cb17-34" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t <span class="va">head_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>    <span class="co">// index of the front element</span></span>
+<span id="cb17-35"><a href="#cb17-35" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t <span class="va">size_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>    <span class="co">// number of elements in the queue</span></span>
+<span id="cb17-36"><a href="#cb17-36" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<p>The representation is a block of slots, the index <code>head_</code> of the front element, and the count <code>size_</code>. The element <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> places behind the front lives at index <code>(head_ + i) % capacity</code>; the remainder operator <code>%</code> is what bends the line into a ring. Pushing writes at offset <code>size_</code>. Popping advances <code>head_</code> by one, wrapping if necessary.</p>
+<p>When the buffer is full, <code>grow</code> allocates one twice as large and copies the elements into it <em>in queue order</em>, starting from the front, so that the queue is “unwrapped” and <code>head_</code> returns to zero. The amortized analysis is identical to the vector’s.</p>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>The classic ring-buffer bug is confusing <em>full</em> with <em>empty</em>. If you represent the queue by two indices, <code>head</code> and <code>tail</code>, then <code>head == tail</code> when the queue is empty, and also when it is completely full. Implementations that use two indices must either leave one slot permanently unused or keep a separate flag. Storing <code>head_</code> and <code>size_</code>, as here, avoids the ambiguity entirely.</p>
+</aside>
+<p>The standard library’s queue is <code>std::queue</code>, an adapter like <code>std::stack</code>. By default both adapt <code>std::deque</code>, a “double-ended queue” that supports constant-time insertion and removal at both ends <em>and</em> constant-time indexing. A typical <code>deque</code> is implemented as an array of pointers to fixed-size blocks: a hybrid of the contiguous and linked approaches.</p>
+</section>
+</section>
+<section id="sec:cache" class="level2">
+<h2><span class="secnum">4.5</span> Contiguous versus linked, on real hardware</h2>
+<p>Here is the comparison as a traditional textbook would give it.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Vector</th>
+<th style="text-align: left;">Linked list</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">access the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>-th element</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>i</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(i)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">insert or remove at the back</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> amortized</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> (doubly linked)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">insert or remove at the front</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">insert or remove at a known position</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">search for a value</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+</tbody>
+</table>
+<p>Read naively, the table says: if your program mostly indexes, use a vector; if it mostly inserts and removes in the middle, use a list. That advice was given to generations of students. Let us test it.</p>
+<section id="sec:exp-traverse" class="level3 unnumbered">
+<h3 class="unnumbered">Experiment 1: just walking</h3>
+<p>Both structures can visit all <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> time. The program <code>traverse.cpp</code> adds up <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> integers stored three ways: in a vector; in a linked list whose nodes happen to sit in memory in list order (the best case for a list, as when it was built all at once and never modified); and in a linked list whose nodes are scattered through memory in random order (what a list tends to look like after a long life of insertions and removals). The numbers are nanoseconds <em>per element</em>.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;">vector</th>
+<th style="text-align: right;">list, nodes in order</th>
+<th style="text-align: right;">list, nodes scattered</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1,000</td>
+<td style="text-align: right;">0.19</td>
+<td style="text-align: right;">0.99</td>
+<td style="text-align: right;">0.99</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">0.19</td>
+<td style="text-align: right;">0.99</td>
+<td style="text-align: right;">2.8</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">100,000</td>
+<td style="text-align: right;">0.19</td>
+<td style="text-align: right;">1.0</td>
+<td style="text-align: right;">7.4</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">1,000,000</td>
+<td style="text-align: right;">0.20</td>
+<td style="text-align: right;">1.3</td>
+<td style="text-align: right;">89</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">10,000,000</td>
+<td style="text-align: right;">0.35</td>
+<td style="text-align: right;">2.3</td>
+<td style="text-align: right;">110</td>
+</tr>
+</tbody>
+</table>
+<p>Same data, same <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>. At ten million elements the scattered list takes more than <strong>three hundred times</strong> as long as the vector to do the same additions.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 4.4</span></p>
+<p>Using what you learned in <a href="02-cost.html#sec:model-lies">Section 2.6</a>, explain (a) why the scattered list is no slower than the in-order list at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> = 1,000, and (b) why it becomes catastrophically slower as <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> grows.</p>
+<details class="answer"><summary>Answer</summary>
+<ol type="a">
+<li>A thousand 16-byte nodes occupy 16 kilobytes, which fits entirely in the processor’s fastest cache. Once loaded, every node is a cache hit regardless of the order in which they are visited. (b) Ten million nodes occupy 160 megabytes, far more than any cache. In list order, consecutive nodes are adjacent in memory, so cache lines and prefetching still help. In scattered order, each <code>next</code> pointer leads to an unpredictable address that is almost never in the cache: a full trip to main memory, about a hundred nanoseconds, for every single element.</li>
+</ol>
+</details>
+</aside>
+<p>Three things work against the linked list, and all of them come from where it lives.</p>
+<p><strong>No locality.</strong> Each node may be on a different cache line from the last. A vector of <code>int</code>s packs sixteen elements into each cache line; a scattered list gets one node per line fetched, at best.</p>
+<p><strong>No prefetching, and no parallelism.</strong> The address of the next node is not known until the current node has been loaded, because the address is stored <em>in</em> the current node. The processor cannot fetch ahead, and it cannot overlap the waiting. This is called <strong>pointer chasing</strong>, and it forces the memory accesses to happen strictly one after another. With a vector, the addresses of the next hundred elements are known in advance, and modern processors exploit that aggressively.</p>
+<p><strong>Overhead.</strong> A node holding a four-byte <code>int</code> also holds an eight-byte pointer, is padded to sixteen bytes, and usually carries some bookkeeping from the memory allocator. The list uses four or more times the memory of the vector to hold the same data, which means fewer elements fit in the cache to begin with.</p>
+<p><a href="#fig:cache-sim">Figure 4.5</a> is a small simulation of the effect.</p>
+<figure class="fig viz" id="fig:cache-sim"><div class="viz-widget" data-viz="cachesim"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 250" width="640" height="250" role="img" aria-label="A vector fills consecutive cache lines; list nodes are scattered across them." xmlns="http://www.w3.org/2000/svg">
+<text class="t-ink b" x="48.0" y="24.0" text-anchor="start" dominant-baseline="central" font-size="13">vector</text>
+<text class="t-muted" x="592.0" y="24.0" text-anchor="end" dominant-baseline="central" font-size="11">12 elements on 2 cache lines</text>
+<rect class="s-muted f-good-soft" x="48" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="56.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">1</text>
+<rect class="s-muted f-good-soft" x="65" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="73.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">2</text>
+<rect class="s-muted f-good-soft" x="82" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="90.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">3</text>
+<rect class="s-muted f-good-soft" x="99" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="107.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">4</text>
+<rect class="s-muted f-good-soft" x="116" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="124.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">5</text>
+<rect class="s-muted f-good-soft" x="133" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="141.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">6</text>
+<rect class="s-muted f-good-soft" x="150" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="158.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">7</text>
+<rect class="s-muted f-good-soft" x="167" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="175.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">8</text>
+<rect class="s-muted f-good-soft" x="184" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="192.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">9</text>
+<rect class="s-muted f-good-soft" x="201" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="209.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">10</text>
+<rect class="s-muted f-good-soft" x="218" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="226.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">11</text>
+<rect class="s-muted f-good-soft" x="235" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="243.5" y="53.0" text-anchor="middle" dominant-baseline="central" font-size="9">12</text>
+<rect class="s-muted f-none" x="252" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="269" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="286" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="303" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="320" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="337" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="354" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="371" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="388" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="405" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="422" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="439" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="456" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="473" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="490" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="507" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="524" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="541" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="558" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="575" y="40" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-none" x="48" y="40" width="136" height="26" rx="0" stroke-width="1.6"/>
+<text class="t-muted" x="116.0" y="78.0" text-anchor="middle" dominant-baseline="central" font-size="10">cache line 0</text>
+<rect class="s-ink f-none" x="184" y="40" width="136" height="26" rx="0" stroke-width="1.6"/>
+<text class="t-muted" x="252.0" y="78.0" text-anchor="middle" dominant-baseline="central" font-size="10">cache line 1</text>
+<rect class="s-ink f-none" x="320" y="40" width="136" height="26" rx="0" stroke-width="1.6"/>
+<text class="t-muted" x="388.0" y="78.0" text-anchor="middle" dominant-baseline="central" font-size="10">cache line 2</text>
+<rect class="s-ink f-none" x="456" y="40" width="136" height="26" rx="0" stroke-width="1.6"/>
+<text class="t-muted" x="524.0" y="78.0" text-anchor="middle" dominant-baseline="central" font-size="10">cache line 3</text>
+<text class="t-ink b" x="48.0" y="114.0" text-anchor="start" dominant-baseline="central" font-size="13">linked list</text>
+<text class="t-muted" x="592.0" y="114.0" text-anchor="end" dominant-baseline="central" font-size="11">12 nodes; nearly every hop lands on a different line</text>
+<rect class="s-muted f-bad-soft" x="48" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="56.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">5</text>
+<rect class="s-muted f-none" x="65" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="82" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="99" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="107.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">1</text>
+<rect class="s-muted f-none" x="116" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="133" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="150" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="158.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">8</text>
+<rect class="s-muted f-none" x="167" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="184" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="201" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="209.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">3</text>
+<rect class="s-muted f-none" x="218" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="235" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="243.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">11</text>
+<rect class="s-muted f-none" x="252" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="269" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="277.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">7</text>
+<rect class="s-muted f-none" x="286" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="303" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="320" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="337" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="345.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">2</text>
+<rect class="s-muted f-none" x="354" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="371" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="379.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">10</text>
+<rect class="s-muted f-none" x="388" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="405" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="422" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="430.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">6</text>
+<rect class="s-muted f-none" x="439" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="456" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="473" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="481.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">12</text>
+<rect class="s-muted f-none" x="490" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-none" x="507" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="524" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="532.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">4</text>
+<rect class="s-muted f-none" x="541" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-muted f-bad-soft" x="558" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<text class="t-ink mono" x="566.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="9">9</text>
+<rect class="s-muted f-none" x="575" y="176" width="17" height="26" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-none" x="48" y="176" width="136" height="26" rx="0" stroke-width="1.6"/>
+<text class="t-muted" x="116.0" y="214.0" text-anchor="middle" dominant-baseline="central" font-size="10">cache line 0</text>
+<rect class="s-ink f-none" x="184" y="176" width="136" height="26" rx="0" stroke-width="1.6"/>
+<text class="t-muted" x="252.0" y="214.0" text-anchor="middle" dominant-baseline="central" font-size="10">cache line 1</text>
+<rect class="s-ink f-none" x="320" y="176" width="136" height="26" rx="0" stroke-width="1.6"/>
+<text class="t-muted" x="388.0" y="214.0" text-anchor="middle" dominant-baseline="central" font-size="10">cache line 2</text>
+<rect class="s-ink f-none" x="456" y="176" width="136" height="26" rx="0" stroke-width="1.6"/>
+<text class="t-muted" x="524.0" y="214.0" text-anchor="middle" dominant-baseline="central" font-size="10">cache line 3</text>
+<path class="s-bad f-none" d="M107.5,174.0 Q226.5,133.4 345.5,174.0" stroke-width="1.1"/>
+<polygon class="s-none f-bad" points="345.5,174.0 338.1,167.7 335.8,174.5"/>
+<path class="s-bad f-none" d="M345.5,174.0 Q277.5,145.7 209.5,174.0" stroke-width="1.1"/>
+<polygon class="s-none f-bad" points="209.5,174.0 219.2,173.9 216.4,167.2"/>
+<path class="s-bad f-none" d="M209.5,174.0 Q371.0,128.0 532.5,174.0" stroke-width="1.1"/>
+<polygon class="s-none f-bad" points="532.5,174.0 524.8,168.1 522.9,175.0"/>
+<path class="s-bad f-none" d="M532.5,174.0 Q294.5,128.0 56.5,174.0" stroke-width="1.1"/>
+<polygon class="s-none f-bad" points="56.5,174.0 66.0,175.8 64.7,168.8"/>
+<path class="s-bad f-none" d="M56.5,174.0 Q243.5,128.0 430.5,174.0" stroke-width="1.1"/>
+<polygon class="s-none f-bad" points="430.5,174.0 422.6,168.4 420.9,175.3"/>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 4.5</span> Memory drawn as a grid of cache lines. A vector’s elements fill consecutive cells, so each line that is fetched serves many accesses. A linked list’s nodes are spread over many lines. In the web edition, run both traversals through a small simulated cache and compare the miss counts.
+</figcaption></figure>
+</section>
+<section id="sec:exp-insert" class="level3 unnumbered">
+<h3 class="unnumbered">Experiment 2: inserting in the middle</h3>
+<p>Traversal is the vector’s home ground. Surely the list wins when the workload is insertion in the middle, the very thing it was designed for?</p>
+<p>This experiment follows one that Bjarne Stroustrup has used in talks for years <span class="citation" data-cites="stroustrup2012">(<a href="#ref-stroustrup2012" role="doc-biblioref">Stroustrup 2012</a>)</span>. Take <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> random integers and insert them one at a time into a sequence that is kept sorted. For each, find the position where it belongs by scanning from the front, then insert it there.</p>
+<div class="listing"><div class="listing-file">code/ch04/bench/sorted_insert.cpp</div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> Container<span class="op">&gt;</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> insert_all_sorted<span class="op">(</span>Container<span class="op">&amp;</span> c<span class="op">,</span> <span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&amp;</span> values<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> values<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> pos <span class="op">=</span> c<span class="op">.</span>begin<span class="op">();</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="op">(</span>pos <span class="op">!=</span> c<span class="op">.</span>end<span class="op">()</span> <span class="op">&amp;&amp;</span> <span class="op">*</span>pos <span class="op">&lt;</span> x<span class="op">)</span> <span class="op">++</span>pos<span class="op">;</span>   <span class="co">// linear scan</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>        c<span class="op">.</span>insert<span class="op">(</span>pos<span class="op">,</span> x<span class="op">);</span>   <span class="co">// vector: shift the tail. list: relink.</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>For the vector, each insertion shifts on average half the elements. For the list, each insertion relinks a couple of pointers.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 4.5</span></p>
+<p>Predict: which container finishes sooner, and by how much? Does your answer depend on <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>?</p>
+<details class="answer"><summary>Answer</summary>
+<p>See the table. If you predicted that the list wins for large <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>, you are in the good company of nearly everyone who has seen only the Big-O table.</p>
+</details>
+</aside>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;"><code>std::vector</code></th>
+<th style="text-align: right;"><code>std::list</code></th>
+<th style="text-align: right;">list ÷ vector</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">0.007 s</td>
+<td style="text-align: right;">0.072 s</td>
+<td style="text-align: right;">10</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">20,000</td>
+<td style="text-align: right;">0.025 s</td>
+<td style="text-align: right;">0.35 s</td>
+<td style="text-align: right;">14</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">40,000</td>
+<td style="text-align: right;">0.10 s</td>
+<td style="text-align: right;">1.9 s</td>
+<td style="text-align: right;">19</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">80,000</td>
+<td style="text-align: right;">0.40 s</td>
+<td style="text-align: right;">12 s</td>
+<td style="text-align: right;">31</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">160,000</td>
+<td style="text-align: right;">1.6 s</td>
+<td style="text-align: right;">68 s</td>
+<td style="text-align: right;">44</td>
+</tr>
+</tbody>
+</table>
+<p>The vector wins at every size, and its lead <em>grows</em> with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>.</p>
+<p>The reason is in the part of the task that the Big-O table’s “known position” quietly assumed away. Before you can insert at a position you must <em>find</em> the position, and finding it means walking the sequence. That walk is experiment 1 again, and the list loses it badly. The vector then has to shift its elements, but shifting a contiguous block is among the fastest things a computer can do: it is a straight-line copy through memory, with perfect locality. Both containers do <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> work per insertion. The vector’s <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> has a far smaller constant.</p>
+<p>(The right way to do this particular task is with neither. Binary search finds the position in a vector in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math>, and the structures of <a href="06-trees.html">Chapter 6</a> and <a href="07-balance.html">Chapter 7</a> make the insertion logarithmic as well.)</p>
+</section>
+<section id="sec:when-lists" class="level3 unnumbered">
+<h3 class="unnumbered">So when is a linked list the right choice?</h3>
+<p>Rarely, but not never. A linked list earns its place when one of its particular promises is what you need.</p>
+<ul>
+<li><strong>Stable addresses.</strong> Nodes never move. If other parts of the program hold pointers or iterators to elements and those must remain valid while the sequence changes, a vector will not do.</li>
+<li><strong>Constant-time splicing and removal, given the node.</strong> If you <em>already hold</em> a pointer to the node, with no search required, a doubly linked list removes or relocates it in constant time. This is how a least-recently-used cache works (<a href="10-wild.html">Chapter 10</a>), and how operating system kernels keep track of processes and memory pages, with the links embedded directly in the objects.</li>
+<li><strong>Elements that are large or expensive to move</strong>, where shifting them would cost more than chasing pointers.</li>
+<li><strong>A worst-case guarantee per operation</strong>, where the occasional <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> reallocation of a vector is unacceptable.</li>
+</ul>
+<p>And the most important reason to have learned them has nothing to do with lists. Trees, graphs, and hash-table chains are all nodes joined by pointers, and everything you practiced this week (allocating nodes, rewiring links in the right order, cleaning up without leaks) carries over to them directly.</p>
+<p>For everyday sequences, the guidance from the people who design and implement C++ is blunt: <strong>use <code>std::vector</code> unless you have a specific, measured reason not to</strong> <span class="citation" data-cites="coreguidelines">(<a href="#ref-coreguidelines" role="doc-biblioref">Stroustrup and Sutter 2026</a>)</span>.</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>The claim that linked lists are the right choice for insertion-heavy workloads is one of the most frequently repeated statements in programming education, so it is heavily represented in the text that language models learned from. Ask one:</p>
+<blockquote>
+<p>When should I choose std::list over std::vector in C++? Be specific.</p>
+</blockquote>
+<p>Then grade the answer against the measurements in this section. Does it mention cache behavior? Does it distinguish “insertion at a position you already hold” from “insertion at a position you must first find”? Does it give any numbers, and if so, where could they have come from? A good answer exists and a model may well produce it. Your job is to be able to tell, and you can, because you have run the experiment.</p>
+</aside>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">Linked lists</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+One heap allocation per element, anywhere in memory, joined by pointers. The list object holds a head pointer (or a sentinel). Order is explicit in the links, not implicit in the layout.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+Following <code>next</code> from the head visits every element once and ends (at null, or back at the sentinel). In a doubly linked list, <code>p-&gt;next-&gt;prev == p</code> for every node. Nodes never move, so pointers and iterators to an element stay valid until it is removed.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Insert or remove at the front, or at a node you already hold: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>. Reaching the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>-th element, or finding a value: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>, with a large constant because of cache misses and pointer chasing. Memory: one or two extra pointers per element, plus allocator overhead.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+An invariant check that walks the list and counts; differential tests against <code>std::list</code> and <code>std::deque</code>; and AddressSanitizer, which is at its most valuable on code that allocates and frees many small nodes.
+</dd>
+</dl>
+</aside>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">Stack and queue</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+These are abstract data types; they live wherever the implementation puts them. A stack is naturally a vector with the top at the back. A queue is naturally a ring buffer: a contiguous block used circularly.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+Stack: last in, first out. Queue: first in, first out. Nothing else is accessible.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Every operation is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>, amortized where the underlying block may grow.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+Differential tests against <code>std::stack</code> and <code>std::queue</code>; for the ring buffer, tests that force the contents to wrap around the end and to grow while wrapped.
+</dd>
+</dl>
+</aside>
+</section>
+</section>
+<section id="sec:links-ex" class="level2 unnumbered">
+<h2 class="unnumbered">Exercises</h2>
+<ol type="1">
+<li><p>Draw the list after each statement, including where <code>head_</code> points and every <code>next</code> pointer.</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>List<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> a<span class="op">;</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>a<span class="op">.</span>push_front<span class="op">(</span><span class="dv">3</span><span class="op">);</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>a<span class="op">.</span>push_front<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>a<span class="op">.</span>push_front<span class="op">(</span><span class="dv">4</span><span class="op">);</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>a<span class="op">.</span>remove<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>a<span class="op">.</span>reverse<span class="op">();</span></span></code></pre></div></li>
+<li><p>Each of these has a bug. Identify it and name its consequence (leak, use after free, lost nodes, or infinite loop).</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co">// (a) push_front</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>Node<span class="op">*</span> fresh <span class="op">=</span> <span class="kw">new</span> Node<span class="op">{</span>value<span class="op">,</span> <span class="kw">nullptr</span><span class="op">};</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="va">head_</span> <span class="op">=</span> fresh<span class="op">;</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>fresh<span class="op">-&gt;</span>next <span class="op">=</span> <span class="va">head_</span><span class="op">;</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="co">// (b) clear</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span>Node<span class="op">*</span> p <span class="op">=</span> <span class="va">head_</span><span class="op">;</span> p <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">;</span> p <span class="op">=</span> p<span class="op">-&gt;</span>next<span class="op">)</span> <span class="kw">delete</span> p<span class="op">;</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a><span class="co">// (c) remove the node after p</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="kw">delete</span> p<span class="op">-&gt;</span>next<span class="op">;</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>p<span class="op">-&gt;</span>next <span class="op">=</span> p<span class="op">-&gt;</span>next<span class="op">-&gt;</span>next<span class="op">;</span></span></code></pre></div></li>
+<li><p>Add <code>void push_back(T value)</code> to <code>List&lt;T&gt;</code>. First write it without changing the class’s data members; what is its cost? Then add a <code>tail_</code> pointer and make it <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>. Which existing member functions must now also maintain <code>tail_</code>? (List them all before you look at the code; it is easy to miss one.)</p></li>
+<li><p>Write a member function <code>T&amp; nth(std::size_t n)</code> for <code>List&lt;T&gt;</code> that returns the element at position <code>n</code>. Then explain why this loop is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n^2)</annotation></semantics></math>, and rewrite it to be <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>.</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> list<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>i<span class="op">)</span> total <span class="op">+=</span> list<span class="op">.</span>nth<span class="op">(</span>i<span class="op">);</span></span></code></pre></div></li>
+<li><p>Rewrite <code>List&lt;T&gt;::remove</code> using the pointer-to-pointer technique of <code>insert_sorted</code>, so that it has no special case for the first node.</p></li>
+<li><p>Write a function that determines whether a singly linked list (given only a pointer to its first node) contains a cycle, using <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math> extra memory. (Hint: use two pointers that advance at different speeds. This is known as Floyd’s “tortoise and hare” algorithm.)</p></li>
+<li><p>Write a function that merges two <em>sorted</em> singly linked lists into one sorted list by relinking the existing nodes, allocating nothing. What is its running time?</p></li>
+<li><p>In <code>DList</code>, the sentinel node contains a <code>T value</code> that is never used. What does this require of the type <code>T</code>? Suggest a way to restructure <code>Node</code> so that the sentinel does not need to hold a <code>T</code>.</p></li>
+<li><p>Implement <code>void splice(Iterator pos, DList&amp; other)</code> for <code>DList&lt;T&gt;</code>: it moves <em>all</em> of <code>other</code>’s nodes into this list, just before <code>pos</code>, in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> time, leaving <code>other</code> empty. Check your work with <code>check_invariant</code> on both lists.</p></li>
+<li><p>Implement a queue using two stacks: <code>push</code> pushes onto the first stack; <code>pop</code> pops from the second, and when the second is empty it first moves everything from the first stack onto it. Show that although a single <code>pop</code> can take <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> time, the amortized cost of every operation is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>. (Use the coin argument: how many times is each element moved in its lifetime?)</p></li>
+<li><p>Extend <code>balanced</code> so that it ignores brackets inside double-quoted strings, so that <code>f("(")</code> is balanced. Then extend it to report the <em>position</em> of the first error.</p></li>
+<li><p>Trace the <code>RingQueue</code> through: push 1 through 4 (the first push allocates a buffer of capacity 4); pop twice; push 5 and 6; push 7. For each step give <code>head_</code>, <code>size_</code>, and the contents of every slot. At which push does <code>grow</code> run, and what do the slots look like immediately afterward?</p></li>
+<li><p>Run <code>traverse.cpp</code> and <code>sorted_insert.cpp</code> on your own machine. Then modify <code>sorted_insert.cpp</code> so that each element is a struct containing an <code>int</code> key and a <code>char payload[N]</code>, and repeat the experiment for N = 64, 256, and 1024. As the elements get bigger, shifting them costs more. Is there a size at which the list catches up? Report your numbers.</p></li>
+<li><p><strong>With a model, as critic.</strong> Write <code>DList&lt;T&gt;::reverse()</code>, which reverses the list in place, and test it. Then ask a model to “state the loop invariant of this function, and identify any input for which it fails to restore <code>p-&gt;next-&gt;prev == p</code> for every node.” Check its claimed counterexamples by running them.</p></li>
+<li><p><strong>Lab.</strong> Implement a text editor’s <em>line buffer</em> in two ways: as a <code>std::vector&lt;std::string&gt;</code> and as a <code>std::list&lt;std::string&gt;</code>. Support: insert a line at the cursor, delete the line at the cursor, move the cursor up and down, and jump to line <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>. Write a driver that replays a file of editing commands against either implementation. Construct two command files, one on which the vector is clearly faster and one on which the list is clearly faster, and explain each result in terms of this chapter. (The second file is harder to construct than you might expect. Why?)</p></li>
+</ol>
+</section>
+<section id="sec:links-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Chapter notes</h2>
+<p>Linked lists date from the mid-1950s; Knuth <span class="citation" data-cites="knuth1997">(<a href="#ref-knuth1997" role="doc-biblioref">Knuth 1997</a>)</span> gives the history along with a thorough treatment of singly, doubly, and circularly linked variants. The idea of specifying a data type by its operations, independent of representation, was formulated by Liskov and Zilles <span class="citation" data-cites="liskov1974">(<a href="#ref-liskov1974" role="doc-biblioref">Liskov and Zilles 1974</a>)</span>, and is one of the organizing ideas of software engineering.</p>
+<p>The argument that contiguous storage should be the default on modern hardware has been made forcefully by Stroustrup, whose sorted-insertion experiment <span class="citation" data-cites="stroustrup2012">(<a href="#ref-stroustrup2012" role="doc-biblioref">Stroustrup 2012</a>)</span> is reproduced in this chapter. The underlying facts about caches and memory are laid out by Drepper <span class="citation" data-cites="drepper2007">(<a href="#ref-drepper2007" role="doc-biblioref">Drepper 2007</a>)</span>.</p>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-drepper2007" class="csl-entry" role="listitem">
+Drepper, Ulrich. 2007. <span>“What Every Programmer Should Know about Memory.”</span> <a href="https://www.akkadia.org/drepper/cpumemory.pdf">https://www.akkadia.org/drepper/cpumemory.pdf</a>.
+</div>
+<div id="ref-knuth1997" class="csl-entry" role="listitem">
+Knuth, Donald E. 1997. <em>The Art of Computer Programming, Volume 1: Fundamental Algorithms</em>. 3rd ed. Addison-Wesley.
+</div>
+<div id="ref-liskov1974" class="csl-entry" role="listitem">
+Liskov, Barbara, and Stephen Zilles. 1974. <span>“Programming with Abstract Data Types.”</span> <em>ACM SIGPLAN Notices</em> 9 (4): 50–59.
+</div>
+<div id="ref-stroustrup2012" class="csl-entry" role="listitem">
+Stroustrup, Bjarne. 2012. <span>“<span>C++11</span> Style.”</span> Keynote address, GoingNative 2012, Redmond, WA.
+</div>
+<div id="ref-coreguidelines" class="csl-entry" role="listitem">
+Stroustrup, Bjarne, and Herb Sutter. 2026. <span>“<span>C++</span> Core Guidelines.”</span> <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines">https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines</a>.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="03-vector.html"><span>← Previous</span>Building a Vector</a>
+<a class="next" href="05-hashing.html"><span>Next →</span>Hashing</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+<script src="assets/viz/core.js"></script>
+<script src="assets/viz/linkedlist.js"></script>
+<script src="assets/viz/ring.js"></script>
+<script src="assets/viz/cachesim.js"></script>
+<script>Viz.mountAll();</script>
+</body>
+</html>

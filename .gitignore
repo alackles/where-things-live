@@ -1,0 +1,5 @@
+# intermediate build products (dist/ holds the finished editions and is kept)
+build/
+__pycache__/
+*.pyc
+dist/html/_gallery.html

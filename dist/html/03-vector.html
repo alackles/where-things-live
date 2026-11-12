@@ -1,0 +1,1003 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building a Vector · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-chapter">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Chapter 3: Building a Vector</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class="current"><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+<ol class="secs">
+<li><a href="#sec:vec-design"><span class="n">3.1</span> Three numbers</a></li>
+<li><a href="#sec:amortized"><span class="n">3.2</span> Growing, and what it costs</a></li>
+<li><a href="#sec:rule-of-three"><span class="n">3.3</span> Copying</a></li>
+<li><a href="#sec:move"><span class="n">3.4</span> Moving</a></li>
+<li><a href="#sec:templates"><span class="n">3.5</span> Templates and iterators</a></li>
+<li><a href="#sec:vec-testing"><span class="n">3.6</span> How do you know?</a></li>
+<li><a href="#sec:vector-ex">Exercises</a></li>
+<li><a href="#sec:vector-notes">Chapter notes</a></li>
+</ol>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:vector">
+<p class="kicker">
+Chapter 3 · Week 3
+</p>
+<h1>
+Building a Vector
+</h1>
+</header>
+<aside class="callout goals"><p class="callout-title"><span class="lab">This week</span></p>
+<p>By the end of this week you should be able to:</p>
+<ul>
+<li>implement a growable array as a C++ class with a pointer, a size, and a capacity, and state its representation invariant;</li>
+<li>explain why doubling the capacity makes <code>push_back</code> cost <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math> <em>amortized</em>, and why growing by a fixed amount does not;</li>
+<li>write a destructor, copy constructor, copy assignment, move constructor, and move assignment for a class that owns memory, and say when a class needs none of them;</li>
+<li>turn a class into a template, and give it iterators so that range-<code>for</code> and the standard algorithms work on it;</li>
+<li>test a container by checking its invariant and by comparing it against a trusted reference on random operations.</li>
+</ul>
+</aside>
+<p>You have been using <code>std::vector</code> since the first day. It behaves like an array that grows: you call <code>push_back</code> as many times as you like and it always has room. But <a href="01-memory.html">Chapter 1</a> established that an array is a block of memory of a fixed size, with other objects living on either side of it. There is no operation for making a block bigger where it stands.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 3.1</span></p>
+<p>A vector is holding four <code>int</code>s in a heap block with room for exactly four. The program calls <code>push_back</code>. What has to happen? And if the program then calls <code>push_back</code> a million more times, how many times in total do you think an element gets copied from one place to another?</p>
+<details class="answer"><summary>Answer</summary>
+<p>The vector must allocate a new, larger block, copy the four elements into it, delete the old block, and then add the fifth. The answer to the second question depends entirely on <em>how much</em> larger each new block is, and working that out is the centerpiece of this chapter. With the policy real vectors use, the answer is: about a million copies. With the most obvious policy, it is about five hundred <em>billion</em>.</p>
+</details>
+</aside>
+<p>This week we build <code>std::vector</code>. Not because the world needs another one, but because it is the perfect first data structure. It is simple enough to hold in your head and it is the most widely used container in all of C++. And building it properly requires nearly every important idea in the language’s approach to memory: classes that own resources, constructors and destructors, copying and moving, templates, and iterators. We will go through all four of the book’s questions with care, because the pattern set here repeats in every later chapter.</p>
+<section id="sec:vec-design" class="level2">
+<h2><span class="secnum">3.1</span> Three numbers</h2>
+<p>A growable array needs a block of memory on the heap, and it needs to know two things about that block: how many elements it can hold, and how many it currently does hold. The trick that makes growth affordable is to let those two numbers differ. We allocate <em>more</em> room than we need, and keep track of how much is in use.</p>
+<figure class="fig" id="fig:vec-layout"><svg class="figsvg" viewBox="0 0 640 200" width="640" height="200" role="img" aria-label="A vector object with data, size and capacity fields, and its heap block." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-muted f-muted-soft" x="24" y="44" width="170" height="112" rx="0" stroke-width="1.3"/>
+<text class="t-muted b" x="32.0" y="56.0" text-anchor="start" dominant-baseline="central" font-size="11">the vector object</text>
+<text class="t-ink mono" x="98.0" y="78.0" text-anchor="end" dominant-baseline="central" font-size="13">data_</text>
+<rect class="s-ink f-paper" x="106" y="66" width="78" height="24" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="145.0" cy="78" r="2.8" stroke-width="1.3"/>
+<text class="t-ink mono" x="98.0" y="108.0" text-anchor="end" dominant-baseline="central" font-size="13">size_</text>
+<rect class="s-ink f-paper" x="106" y="96" width="78" height="24" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="145.0" y="108.0" text-anchor="middle" dominant-baseline="central" font-size="13">5</text>
+<text class="t-ink mono" x="98.0" y="138.0" text-anchor="end" dominant-baseline="central" font-size="13">capacity_</text>
+<rect class="s-ink f-paper" x="106" y="126" width="78" height="24" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="145.0" y="138.0" text-anchor="middle" dominant-baseline="central" font-size="13">8</text>
+<rect class="s-ink f-accent-soft" x="270" y="70" width="42" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="291.0" y="88.0" text-anchor="middle" dominant-baseline="central" font-size="14">10</text>
+<text class="t-muted mono" x="291.0" y="117.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-ink f-accent-soft" x="312" y="70" width="42" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="333.0" y="88.0" text-anchor="middle" dominant-baseline="central" font-size="14">20</text>
+<text class="t-muted mono" x="333.0" y="117.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-ink f-accent-soft" x="354" y="70" width="42" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="375.0" y="88.0" text-anchor="middle" dominant-baseline="central" font-size="14">30</text>
+<text class="t-muted mono" x="375.0" y="117.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-accent-soft" x="396" y="70" width="42" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="417.0" y="88.0" text-anchor="middle" dominant-baseline="central" font-size="14">40</text>
+<text class="t-muted mono" x="417.0" y="117.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-accent-soft" x="438" y="70" width="42" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="459.0" y="88.0" text-anchor="middle" dominant-baseline="central" font-size="14">50</text>
+<text class="t-muted mono" x="459.0" y="117.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-muted-soft" x="480" y="70" width="42" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="501.0" y="117.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-muted-soft" x="522" y="70" width="42" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="543.0" y="117.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-muted-soft" x="564" y="70" width="42" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="585.0" y="117.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<path class="s-ink f-none" d="M145.0,78.0 Q220.0,60.0 266.0,84.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="266.0,84.0 259.7,76.6 256.4,83.0"/>
+<line class="s-accent f-none" x1="272.0" y1="124.0" x2="272.0" y2="130.0" stroke-width="1.3"/>
+<line class="s-accent f-none" x1="272.0" y1="130.0" x2="478.0" y2="130.0" stroke-width="1.3"/>
+<line class="s-accent f-none" x1="478.0" y1="130.0" x2="478.0" y2="124.0" stroke-width="1.3"/>
+<text class="t-accent" x="375.0" y="141.0" text-anchor="middle" dominant-baseline="central" font-size="12">size = 5 (in use)</text>
+<line class="s-muted f-none" x1="272.0" y1="62.0" x2="272.0" y2="56.0" stroke-width="1.3"/>
+<line class="s-muted f-none" x1="272.0" y1="56.0" x2="604.0" y2="56.0" stroke-width="1.3"/>
+<line class="s-muted f-none" x1="604.0" y1="56.0" x2="604.0" y2="62.0" stroke-width="1.3"/>
+<text class="t-muted" x="438.0" y="45.0" text-anchor="middle" dominant-baseline="central" font-size="12">capacity = 8</text>
+<text class="t-muted i" x="543.0" y="138.0" text-anchor="middle" dominant-baseline="central" font-size="11">spare</text>
+<text class="t-muted" x="438.0" y="178.0" text-anchor="middle" dominant-baseline="central" font-size="11">one contiguous heap block</text>
+</svg><figcaption>
+<span class="fignum">Figure 3.1</span> The layout of a vector. The object itself is three machine words, wherever the variable lives. The elements live in a separate heap block. <code>size</code> counts the elements in use; <code>capacity</code> is how many the block can hold before it must be replaced.
+</figcaption></figure>
+<p>So the whole representation is three numbers, shown in <a href="#fig:vec-layout">Figure 3.1</a>: a pointer to the block, the <strong>size</strong>, and the <strong>capacity</strong>. We will build a version that holds <code>int</code>s first, called <code>IntVec</code>, and generalize later.</p>
+<div class="listing"><div class="listing-file">code/ch03/intvec.hpp</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> <span class="va">data_</span> <span class="op">=</span> <span class="kw">nullptr</span><span class="op">;</span>        <span class="co">// the heap block (null when capacity_ is 0)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t <span class="va">size_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>       <span class="co">// how many elements are in use</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t <span class="va">capacity_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>   <span class="co">// how many the block has room for</span></span></code></pre></div>
+</div>
+<p>If you are coming from Java or Python, the shape of a C++ class will be familiar: data members and member functions, some <code>public</code> (usable by anyone) and some <code>private</code> (usable only by the class’s own functions). The trailing underscore on member names is a common convention, used throughout this book, to tell members from parameters and locals. The <code>= nullptr</code> and <code>= 0</code> are default initializers, so a freshly created <code>IntVec</code> starts out empty with no block at all.</p>
+<section id="sec:vec-invariant" class="level3 unnumbered">
+<h3 class="unnumbered">The promise</h3>
+<p>Before writing any operations, write down what must always be true of those three members. This is the <strong>representation invariant</strong>: the conditions that every public member function may assume when it starts and must re-establish before it returns.</p>
+<ol type="1">
+<li><code>size_ &lt;= capacity_</code>.</li>
+<li>If <code>capacity_</code> is zero, <code>data_</code> is null. Otherwise <code>data_</code> points to a heap block with room for exactly <code>capacity_</code> elements, and this object is the only one responsible for deleting it.</li>
+<li>The vector’s contents are <code>data_[0]</code> through <code>data_[size_ - 1]</code>. Slots from <code>size_</code> onward are spare room and mean nothing.</li>
+</ol>
+<p>Everything else follows from these three sentences. If you are ever unsure whether a line of code in a member function is right, the question to ask is whether the invariant holds afterward.</p>
+</section>
+<section id="sec:ctor-dtor" class="level3 unnumbered">
+<h3 class="unnumbered">Birth and death</h3>
+<div class="listing"><div class="listing-file">code/ch03/intvec.hpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>IntVec<span class="op">()</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span>             <span class="co">// an empty vector: no block yet</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">~</span>IntVec<span class="op">()</span> <span class="op">{</span> <span class="kw">delete</span><span class="op">[]</span> <span class="va">data_</span><span class="op">;</span> <span class="op">}</span>   <span class="co">// runs automatically when an IntVec dies</span></span></code></pre></div>
+</div>
+<p>A <strong>constructor</strong> is a function with the same name as the class; it runs when an object is created, and its job is to establish the invariant. Ours has nothing to do beyond the default initializers, so we ask the compiler to generate it with <code>= default</code>.</p>
+<p>A <strong>destructor</strong> is named with a tilde. It runs <em>automatically</em> at the end of the object’s lifetime: when a local variable goes out of scope, when a containing object is destroyed, or when <code>delete</code> is applied to a heap object. Ours gives the block back. (<code>delete[]</code> on a null pointer is defined to do nothing, so an empty <code>IntVec</code> is handled correctly.)</p>
+<p>That one-line destructor is the most important line in the chapter. It is what <a href="01-memory.html#sec:lifetimes">Section 1.5</a> promised: heap memory tied to an object with automatic lifetime. A function that declares an <code>IntVec</code>, fills it, and returns, by any path, cannot leak the block, because the destructor runs no matter how the function exits. The general pattern, in which a constructor acquires a resource and the destructor releases it, goes by the unlovely name <strong>RAII</strong>, for “resource acquisition is initialization.” It is the central idiom of C++, and the reason well-written modern C++ contains almost no explicit <code>delete</code>.</p>
+</section>
+<section id="sec:vec-access" class="level3 unnumbered">
+<h3 class="unnumbered">Access</h3>
+<div class="listing"><div class="listing-file">code/ch03/intvec.hpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t size<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">size_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>size_t capacity<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">capacity_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> empty<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">size_</span> <span class="op">==</span> <span class="dv">0</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">&amp;</span> <span class="kw">operator</span><span class="op">[](</span><span class="bu">std::</span>size_t i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(</span>i <span class="op">&lt;</span> <span class="va">size_</span><span class="op">);</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="va">data_</span><span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> <span class="dt">int</span><span class="op">&amp;</span> <span class="kw">operator</span><span class="op">[](</span><span class="bu">std::</span>size_t i<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(</span>i <span class="op">&lt;</span> <span class="va">size_</span><span class="op">);</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="va">data_</span><span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Three things here are new.</p>
+<p>The <code>const</code> after a member function’s parameter list is a promise that the function does not modify the object. Only such functions can be called on a <code>const IntVec&amp;</code>, which is how you will usually receive a vector as a function parameter.</p>
+<p><code>operator[]</code> is how a class defines what square brackets mean. It returns a <em>reference</em> to the element, which is why <code>v[i] = 7</code> works: the assignment goes through the reference into the block. There are two versions. The first is used on a modifiable vector and returns a reference you can assign through. The second is used on a <code>const</code> vector and returns a reference you can only read.</p>
+<p>And each begins with an <code>assert</code> stating its <strong>precondition</strong>: the index must be in range. <code>std::vector</code>’s own <code>operator[]</code> does not check, for speed. Ours does, because we are learning, and an assertion that fires at the scene of the crime is worth an hour of debugging.</p>
+</section>
+<section id="sec:vec-push" class="level3 unnumbered">
+<h3 class="unnumbered">Growing</h3>
+<div class="listing"><div class="listing-file">code/ch03/intvec.hpp</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> push_back<span class="op">(</span><span class="dt">int</span> value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="va">size_</span> <span class="op">==</span> <span class="va">capacity_</span><span class="op">)</span> grow<span class="op">();</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="va">data_</span><span class="op">[</span><span class="va">size_</span><span class="op">]</span> <span class="op">=</span> value<span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> pop_back<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(</span><span class="va">size_</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">--</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p><code>push_back</code> is short. If there is spare room, the new element goes in the first unused slot and the size goes up by one. If the block is full, we first call a private helper to get a bigger block.</p>
+<div class="listing"><div class="listing-file">code/ch03/intvec.hpp</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Move to a block twice as big.</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> grow<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t new_capacity <span class="op">=</span> <span class="op">(</span><span class="va">capacity_</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">?</span> <span class="dv">1</span> <span class="op">:</span> <span class="dv">2</span> <span class="op">*</span> <span class="va">capacity_</span><span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">*</span> bigger <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span>new_capacity<span class="op">];</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="va">size_</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> bigger<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="va">data_</span><span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span><span class="op">[]</span> <span class="va">data_</span><span class="op">;</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="va">data_</span> <span class="op">=</span> bigger<span class="op">;</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="va">capacity_</span> <span class="op">=</span> new_capacity<span class="op">;</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p><code>grow</code> does what the opening question said it must: allocate a larger block, copy the elements across, delete the old block, and update the pointer and the capacity. Check the invariant: afterward <code>data_</code> points to a block of <code>capacity_</code> slots that we own, the first <code>size_</code> of them hold the contents, and <code>size_ &lt; capacity_</code>, so <code>push_back</code> can proceed.</p>
+<p>The one real decision in <code>grow</code> is the first line. How much bigger should the new block be? The code doubles. The next section is about why.</p>
+</section>
+</section>
+<section id="sec:amortized" class="level2">
+<h2><span class="secnum">3.2</span> Growing, and what it costs</h2>
+<p>Most calls to <code>push_back</code> do a constant amount of work: one comparison, one write, one increment. But a call that triggers <code>grow</code> copies every element: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> for a vector of size <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>. So the worst-case cost of <code>push_back</code> is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>.</p>
+<p>That sounds bad, and it is misleading. The expensive calls are rare, and they are rare in a very particular way. To see it, count the total work for a whole sequence of calls instead of the worst single call.</p>
+<p>The program <code>growth.cpp</code> simulates <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> calls to <code>push_back</code> under four growth policies and counts how many element copies <code>grow</code> performs in total.</p>
+<div class="listing"><div class="listing-file">code/ch03/bench/growth.cpp</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Counts the element copies caused by n push_backs, where `next` maps</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co">// the current capacity to the capacity after one growth step.</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> Policy<span class="op">&gt;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>uint64_t copies_for<span class="op">(</span><span class="bu">std::</span>uint64_t n<span class="op">,</span> Policy next<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>uint64_t copies <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> size <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> capacity <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>uint64_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>size <span class="op">==</span> capacity<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>            copies <span class="op">+=</span> size<span class="op">;</span>             <span class="co">// every element moves to the new block</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>            capacity <span class="op">=</span> next<span class="op">(</span>capacity<span class="op">);</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">++</span>size<span class="op">;</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> copies<span class="op">;</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;">grow by 1</th>
+<th style="text-align: right;">grow by 1000</th>
+<th style="text-align: right;">grow by half</th>
+<th style="text-align: right;">double</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1,000</td>
+<td style="text-align: right;">499,500</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">2,137</td>
+<td style="text-align: right;">1,023</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">49,995,000</td>
+<td style="text-align: right;">45,000</td>
+<td style="text-align: right;">24,284</td>
+<td style="text-align: right;">16,383</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">100,000</td>
+<td style="text-align: right;">4,999,950,000</td>
+<td style="text-align: right;">4,950,000</td>
+<td style="text-align: right;">276,521</td>
+<td style="text-align: right;">131,071</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">1,000,000</td>
+<td style="text-align: right;">499,999,500,000</td>
+<td style="text-align: right;">499,500,000</td>
+<td style="text-align: right;">2,099,753</td>
+<td style="text-align: right;">1,048,575</td>
+</tr>
+</tbody>
+</table>
+<p>Look at the last row. Growing by one slot at a time, a million appends cause half a <em>trillion</em> copies. Growing by a thousand slots at a time is a thousand times better and still terrible: half a billion. But doubling causes about one million copies for one million appends, roughly <strong>one copy per element</strong>. And look down the columns: when <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> goes up by ten, the first two columns go up by a hundred, and the last two go up by ten.</p>
+<section id="sec:doubling" class="level3 unnumbered">
+<h3 class="unnumbered">Why doubling works</h3>
+<p>Under doubling, the capacities are 1, 2, 4, 8, and so on, and <code>grow</code> is called when the size reaches each of those. The copies it makes are</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mo>+</mo><mn>4</mn><mo>+</mo><mi>⋯</mi><mo>+</mo><msup><mn>2</mn><mi>k</mi></msup><mo>,</mo></mrow><annotation encoding="application/x-tex">1 + 2 + 4 + \cdots + 2^k,</annotation></semantics></math></p>
+<p>where <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mi>k</mi></msup><annotation encoding="application/x-tex">2^k</annotation></semantics></math> is the last capacity that filled up, which is less than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>. A sum of doubling terms is always one less than the next term: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mo>+</mo><mn>4</mn><mo>+</mo><mi>⋯</mi><mo>+</mo><msup><mn>2</mn><mi>k</mi></msup><mo>=</mo><msup><mn>2</mn><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></msup><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">1 + 2 + 4 + \cdots + 2^k = 2^{k+1} - 1</annotation></semantics></math>. Since <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>2</mn><mi>k</mi></msup><mo>&lt;</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">2^k &lt; n</annotation></semantics></math>, the total is less than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>n</mi></mrow><annotation encoding="application/x-tex">2n</annotation></semantics></math>.</p>
+<p>So <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> calls to <code>push_back</code> do <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> element writes plus fewer than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>n</mi></mrow><annotation encoding="application/x-tex">2n</annotation></semantics></math> copies: fewer than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>3</mn><mi>n</mi></mrow><annotation encoding="application/x-tex">3n</annotation></semantics></math> steps altogether. The <em>average</em> cost per call, over the whole sequence, is less than 3. A constant.</p>
+<p>Here is another way to see the same thing, which you may find more convincing. Imagine that every call to <code>push_back</code> is charged three coins. One coin pays for writing the new element. The other two are left sitting on that element, saved. Now suppose a block of capacity <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> has just filled. Half of its elements, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>c</mi><mi>/</mi><mn>2</mn></mrow><annotation encoding="application/x-tex">c/2</annotation></semantics></math> of them, were added since the last time the vector grew, and each of those is carrying two saved coins: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> coins in all, exactly enough to pay for copying all <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> elements into the new block. Every expensive operation has been paid for in advance by the cheap ones that led up to it.</p>
+<p><a href="#fig:dynarray">Figure 3.2</a> shows the process; in the web edition you can push elements one at a time under each policy and watch the cost per operation and the running average.</p>
+<figure class="fig viz" id="fig:dynarray"><div class="viz-widget" data-viz="dynarray"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 250" width="640" height="250" role="img" aria-label="A vector growing from capacity 4 to 8 to 16 as elements are appended." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-paper" x="150" y="34" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="164.5" y="49.0" text-anchor="middle" dominant-baseline="central" font-size="12">1</text>
+<rect class="s-ink f-paper" x="179" y="34" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="193.5" y="49.0" text-anchor="middle" dominant-baseline="central" font-size="12">2</text>
+<rect class="s-ink f-paper" x="208" y="34" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="222.5" y="49.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<rect class="s-ink f-paper" x="237" y="34" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="251.5" y="49.0" text-anchor="middle" dominant-baseline="central" font-size="12">4</text>
+<text class="t-ink b" x="138.0" y="42.0" text-anchor="end" dominant-baseline="central" font-size="12">4 appends</text>
+<text class="t-muted" x="138.0" y="57.0" text-anchor="end" dominant-baseline="central" font-size="10">capacity 4, full</text>
+<rect class="s-ink f-accent2-soft" x="150" y="104" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="164.5" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="12">1</text>
+<rect class="s-ink f-accent2-soft" x="179" y="104" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="193.5" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="12">2</text>
+<rect class="s-ink f-accent2-soft" x="208" y="104" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="222.5" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<rect class="s-ink f-accent2-soft" x="237" y="104" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="251.5" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="12">4</text>
+<rect class="s-ink f-accent-soft" x="266" y="104" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="280.5" y="119.0" text-anchor="middle" dominant-baseline="central" font-size="12">5</text>
+<rect class="s-ink f-muted-soft" x="295" y="104" width="29" height="30" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-muted-soft" x="324" y="104" width="29" height="30" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-muted-soft" x="353" y="104" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink b" x="138.0" y="112.0" text-anchor="end" dominant-baseline="central" font-size="12">5th append</text>
+<text class="t-muted" x="138.0" y="127.0" text-anchor="end" dominant-baseline="central" font-size="10">copy 4, then write</text>
+<rect class="s-ink f-accent2-soft" x="150" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="164.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="12">1</text>
+<rect class="s-ink f-accent2-soft" x="179" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="193.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="12">2</text>
+<rect class="s-ink f-accent2-soft" x="208" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="222.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<rect class="s-ink f-accent2-soft" x="237" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="251.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="12">4</text>
+<rect class="s-ink f-accent2-soft" x="266" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="280.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="12">5</text>
+<rect class="s-ink f-accent2-soft" x="295" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="309.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="12">6</text>
+<rect class="s-ink f-accent2-soft" x="324" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="338.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="12">7</text>
+<rect class="s-ink f-accent2-soft" x="353" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="367.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="12">8</text>
+<rect class="s-ink f-accent-soft" x="382" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="396.5" y="189.0" text-anchor="middle" dominant-baseline="central" font-size="12">9</text>
+<rect class="s-ink f-muted-soft" x="411" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-muted-soft" x="440" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-muted-soft" x="469" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-muted-soft" x="498" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-muted-soft" x="527" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-muted-soft" x="556" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-muted-soft" x="585" y="174" width="29" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink b" x="138.0" y="182.0" text-anchor="end" dominant-baseline="central" font-size="12">9th append</text>
+<text class="t-muted" x="138.0" y="197.0" text-anchor="end" dominant-baseline="central" font-size="10">copy 8, then write</text>
+<line class="s-accent2 f-none" x1="208.0" y1="68.0" x2="208.0" y2="92.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="208.0,98.0 211.6,89.0 204.4,89.0"/>
+<line class="s-accent2 f-none" x1="266.0" y1="138.0" x2="266.0" y2="162.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="266.0,168.0 269.6,159.0 262.4,159.0"/>
+<rect class="s-ink f-accent2-soft" x="150" y="222" width="14" height="14" rx="0" stroke-width="1.3"/>
+<text class="t-muted" x="170.0" y="229.0" text-anchor="start" dominant-baseline="central" font-size="11">copied from the old block</text>
+<rect class="s-ink f-accent-soft" x="340" y="222" width="14" height="14" rx="0" stroke-width="1.3"/>
+<text class="t-muted" x="360.0" y="229.0" text-anchor="start" dominant-baseline="central" font-size="11">newly appended</text>
+<rect class="s-ink f-muted-soft" x="470" y="222" width="14" height="14" rx="0" stroke-width="1.3"/>
+<text class="t-muted" x="490.0" y="229.0" text-anchor="start" dominant-baseline="central" font-size="11">spare capacity</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 3.2</span> Appending to a vector that doubles. Most appends write one element. The appends that find the block full (the fifth and ninth here) also copy everything into a block twice as large. The total number of copies stays below twice the number of elements.
+</figcaption></figure>
+</section>
+<section id="sec:amortized-def" class="level3 unnumbered">
+<h3 class="unnumbered">Amortized cost</h3>
+<p>This kind of reasoning has a name. We say that <code>push_back</code> has <strong>amortized</strong> cost <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math>: any sequence of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> calls takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math> time in total, even though an individual call may take much longer than the average <span class="citation" data-cites="tarjan1985">(<a href="#ref-tarjan1985" role="doc-biblioref">Tarjan 1985</a>)</span>. The word comes from accounting, where a large occasional expense is spread over the period that benefits from it.</p>
+<p>Be careful to distinguish amortized cost from average-case cost. An average-case bound depends on an assumption about the inputs, that they are random in some way, and can fail if the assumption does. An amortized bound involves no probability and no assumption. It is a <em>guarantee</em> about every possible sequence of operations: the total can never exceed the bound. The only thing given up is the guarantee about each individual operation.</p>
+<p>Sometimes that matters. If your program must respond within a millisecond every single time (controlling a motor, say, or producing an audio sample) then a <code>push_back</code> that occasionally stops to copy a hundred million elements is unacceptable, however good the average. For most programs, total time is what counts, and amortized <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math> is as good as <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math>.</p>
+</section>
+<section id="sec:constant-growth" class="level3 unnumbered">
+<h3 class="unnumbered">Why growing by a constant fails</h3>
+<p>If the capacity instead grows by a fixed amount <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>, the copies are <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>+</mo><mn>2</mn><mi>k</mi><mo>+</mo><mn>3</mn><mi>k</mi><mo>+</mo><mi>⋯</mi></mrow><annotation encoding="application/x-tex">k + 2k + 3k + \cdots</annotation></semantics></math>, about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>/</mi><mi>k</mi></mrow><annotation encoding="application/x-tex">n/k</annotation></semantics></math> terms in all. That is our old friend the sum of the first so-many whole numbers, and it comes to about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>n</mi><mn>2</mn></msup><mi>/</mi><mn>2</mn><mi>k</mi></mrow><annotation encoding="application/x-tex">n^2/2k</annotation></semantics></math>. The total work is quadratic. A larger <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> shrinks the constant but cannot change the shape, as the second column of the table shows.</p>
+<p>The difference is easy to measure. Here are the times for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> appends under the “grow by 1000” policy and the doubling policy, on the same laptop as before.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;">grow by 1000</th>
+<th style="text-align: right;">double</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">250,000</td>
+<td style="text-align: right;">0.0055 s</td>
+<td style="text-align: right;">0.0007 s</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">500,000</td>
+<td style="text-align: right;">0.0219 s</td>
+<td style="text-align: right;">0.0011 s</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">1,000,000</td>
+<td style="text-align: right;">0.0815 s</td>
+<td style="text-align: right;">0.0020 s</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">2,000,000</td>
+<td style="text-align: right;">0.3875 s</td>
+<td style="text-align: right;">0.0039 s</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">4,000,000</td>
+<td style="text-align: right;">2.4104 s</td>
+<td style="text-align: right;">0.0090 s</td>
+</tr>
+</tbody>
+</table>
+<p>Apply the doubling test from <a href="02-cost.html#sec:measuring">Section 2.5</a>. The right-hand column roughly doubles from row to row: linear. The left-hand column roughly quadruples, and then some: quadratic. At four million elements the gap is a factor of 270.</p>
+<p>The general principle is that growth must be <strong>geometric</strong>: each new capacity must be a constant <em>multiple</em> of the old one. Any multiplier greater than 1 gives amortized constant time. The choice of multiplier is a trade between time and space. A factor of 2 means fewer reallocations but up to half the block sitting idle. A factor of 1.5 wastes less space and copies somewhat more, as the table’s third column shows.</p>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>Every mainstream language’s growable array uses geometric growth; they differ only in the factor. The GNU and LLVM implementations of <code>std::vector</code> double. Microsoft’s grows by a factor of 1.5, as does Java’s <code>ArrayList</code>. Python’s <code>list</code> over-allocates by about one-eighth. The smaller factors spend a little more time copying in exchange for less idle memory.</p>
+<p>When you know in advance roughly how many elements are coming, you can skip the intermediate reallocations altogether by calling <code>v.reserve(n)</code> first. It is one of the cheapest optimizations in C++, and you will see it in careful code everywhere.</p>
+</aside>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Amortized analysis is an idea that often needs to be heard twice, in different words. Once you have read this section and can state the coin argument in your own words, try the <em>teach-back</em> pattern:</p>
+<blockquote>
+<p>I am going to explain why push_back on a doubling dynamic array is amortized O(1). Do not correct me until I am finished. Then tell me precisely which steps of my explanation were wrong or hand-wavy, and ask me one follow-up question that tests whether I really understand it.</p>
+</blockquote>
+<p>Then explain it, out loud or in writing, without looking at the book. A good follow-up question is “what happens if the array also <em>shrinks</em> by half whenever it becomes half empty?” (The answer is in the exercises, and it is a trap.)</p>
+</aside>
+</section>
+</section>
+<section id="sec:rule-of-three" class="level2">
+<h2><span class="secnum">3.3</span> Copying</h2>
+<p>Our <code>IntVec</code> can be created, filled, and destroyed. Now consider this innocent line:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>IntVec b <span class="op">=</span> a<span class="op">;</span></span></code></pre></div>
+<p><a href="01-memory.html">Chapter 1</a> said that initialization copies. But we have not told the compiler how to copy an <code>IntVec</code>, so it does the only thing it can: it copies each member. <code>b.data_</code> gets the value of <code>a.data_</code>. <code>b.size_</code> gets <code>a.size_</code>. Member by member, bit for bit.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 3.2</span></p>
+<p>After that member-by-member copy, draw the stack and heap. How many heap blocks are there? What happens when <code>b</code> and then <code>a</code> are destroyed?</p>
+<details class="answer"><summary>Answer</summary>
+<p>There is one block, with two <code>IntVec</code> objects pointing at it: the left side of <a href="#fig:shallow-deep">Figure 3.3</a>. A <code>push_back</code> through <code>b</code> would be invisible to <code>a</code>’s size, and if <code>b</code> grew, it would delete the block out from under <code>a</code>. Even if nobody touches either vector, when they go out of scope both destructors run, and both <code>delete[]</code> the same block: a double free.</p>
+</details>
+</aside>
+<figure class="fig" id="fig:shallow-deep"><svg class="figsvg" viewBox="0 0 640 190" width="640" height="190" role="img" aria-label="Shallow copy: two objects share one block. Deep copy: each has its own." xmlns="http://www.w3.org/2000/svg">
+<text class="t-ink b" x="150.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="13">member-by-member copy</text>
+<text class="t-ink mono b" x="42.0" y="64.0" text-anchor="end" dominant-baseline="central" font-size="14">a</text>
+<rect class="s-ink f-muted-soft" x="50" y="50" width="56" height="28" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="78" cy="64" r="2.8" stroke-width="1.3"/>
+<text class="t-ink mono b" x="42.0" y="134.0" text-anchor="end" dominant-baseline="central" font-size="14">b</text>
+<rect class="s-ink f-muted-soft" x="50" y="120" width="56" height="28" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="78" cy="134" r="2.8" stroke-width="1.3"/>
+<rect class="s-bad f-bad-soft" x="190" y="82" width="40" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="210.0" y="99.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<rect class="s-bad f-bad-soft" x="230" y="82" width="40" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="250.0" y="99.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<line class="s-ink f-none" x1="78.0" y1="64.0" x2="180.2" y2="90.5" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="186.0,92.0 178.2,86.3 176.4,93.2"/>
+<line class="s-ink f-none" x1="78.0" y1="134.0" x2="180.2" y2="107.5" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="186.0,106.0 176.4,104.8 178.2,111.7"/>
+<text class="t-bad" x="230.0" y="134.0" text-anchor="middle" dominant-baseline="central" font-size="11">one block,</text>
+<text class="t-bad" x="230.0" y="148.0" text-anchor="middle" dominant-baseline="central" font-size="11">two owners</text>
+<line class="s-muted f-none dash" x1="320.0" y1="10.0" x2="320.0" y2="180.0" stroke-width="1.3"/>
+<text class="t-ink b" x="480.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="13">copy constructor</text>
+<text class="t-ink mono b" x="372.0" y="64.0" text-anchor="end" dominant-baseline="central" font-size="14">a</text>
+<rect class="s-ink f-muted-soft" x="380" y="50" width="56" height="28" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="408" cy="64" r="2.8" stroke-width="1.3"/>
+<text class="t-ink mono b" x="372.0" y="134.0" text-anchor="end" dominant-baseline="central" font-size="14">b</text>
+<rect class="s-ink f-muted-soft" x="380" y="120" width="56" height="28" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="408" cy="134" r="2.8" stroke-width="1.3"/>
+<rect class="s-good f-good-soft" x="510" y="47" width="40" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="530.0" y="64.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<rect class="s-good f-good-soft" x="550" y="47" width="40" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="570.0" y="64.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<rect class="s-good f-good-soft" x="510" y="117" width="40" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="530.0" y="134.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<rect class="s-good f-good-soft" x="550" y="117" width="40" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="570.0" y="134.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<line class="s-ink f-none" x1="408.0" y1="64.0" x2="500.0" y2="64.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="506.0,64.0 497.0,60.4 497.0,67.6"/>
+<line class="s-ink f-none" x1="408.0" y1="134.0" x2="500.0" y2="134.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="506.0,134.0 497.0,130.4 497.0,137.6"/>
+<text class="t-good" x="550.0" y="168.0" text-anchor="middle" dominant-baseline="central" font-size="11">each owns its own block</text>
+</svg><figcaption>
+<span class="fignum">Figure 3.3</span> Left: a member-by-member (“shallow”) copy duplicates the pointer, so two objects believe they own one block. Right: a proper (“deep”) copy allocates a second block and copies the elements, so the invariant holds for both objects.
+</figcaption></figure>
+<p>Here is a minimal class with exactly this flaw, and what the sanitizer says when one object is copied to another and both are destroyed.</p>
+<div class="listing"><div class="listing-file">code/ch03/bugs/shallow.cpp</div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">// What goes wrong if a class that owns memory has no copy constructor.</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cstddef&gt;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Naive <span class="op">{</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    Naive<span class="op">()</span> <span class="op">:</span> <span class="va">data_</span><span class="op">(</span><span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">4</span><span class="op">]{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">})</span> <span class="op">{}</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>Naive<span class="op">()</span> <span class="op">{</span> <span class="kw">delete</span><span class="op">[]</span> <span class="va">data_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// no copy constructor: the compiler supplies one that copies data_,</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// the POINTER, so two objects end up owning one block</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">*</span> <span class="va">data_</span><span class="op">;</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    Naive a<span class="op">;</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    Naive b <span class="op">=</span> a<span class="op">;</span>   <span class="co">// b.data_ == a.data_</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span>                  <span class="co">// b&#39;s destructor frees the block; then a&#39;s frees it again</span></span></code></pre></div>
+</div>
+<pre class="console"><code>==26587==ERROR: AddressSanitizer: attempting double-free on 0x502000000010
+    #1 0x6367f90ed71e in Naive::~Naive() ch03/bugs/shallow.cpp:7
+    #2 0x6367f90ed3a1 in main ch03/bugs/shallow.cpp:17</code></pre>
+<p>The member-by-member copy broke clause 2 of our invariant: two objects are now responsible for the same block. To fix it we must tell the compiler what copying an <code>IntVec</code> means, by writing two special member functions.</p>
+<div class="listing"><div class="listing-file">code/ch03/intvec.hpp</div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Copy constructor: build a new IntVec as an independent copy of other.</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>IntVec<span class="op">(</span><span class="at">const</span> IntVec<span class="op">&amp;</span> other<span class="op">)</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">:</span> <span class="va">data_</span><span class="op">(</span>other<span class="op">.</span><span class="va">size_</span> <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">?</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span>other<span class="op">.</span><span class="va">size_</span><span class="op">]</span> <span class="op">:</span> <span class="kw">nullptr</span><span class="op">),</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>      <span class="va">size_</span><span class="op">(</span>other<span class="op">.</span><span class="va">size_</span><span class="op">),</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>      <span class="va">capacity_</span><span class="op">(</span>other<span class="op">.</span><span class="va">size_</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="va">size_</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="va">data_</span><span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> other<span class="op">.</span><span class="va">data_</span><span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Copy assignment: make an existing IntVec into a copy of other.</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>IntVec<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="at">const</span> IntVec<span class="op">&amp;</span> other<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="kw">this</span> <span class="op">!=</span> <span class="op">&amp;</span>other<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>        IntVec copy<span class="op">(</span>other<span class="op">);</span>   <span class="co">// may throw; *this is untouched so far</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>        swap<span class="op">(</span>copy<span class="op">);</span>           <span class="co">// take the copy&#39;s block, give it our old one</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span>                         <span class="co">// copy&#39;s destructor frees our old block</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The <strong>copy constructor</strong> builds a brand-new object from an existing one. Its parameter is a <code>const</code> reference to an object of the same class. The part between the colon and the opening brace is a <em>member initializer list</em>, which sets up the members directly: a new block just big enough for the other vector’s elements, and matching size and capacity. The body then copies the elements. The result is the right side of <a href="#fig:shallow-deep">Figure 3.3</a>.</p>
+<p><strong>Copy assignment</strong>, <code>operator=</code>, handles <code>c = a</code> where <code>c</code> already exists and already owns a block. It has more to worry about: the old block must be freed, the object might be assigned to itself (<code>a = a</code>), and if allocating the new block fails, the object should be left as it was. The version here takes care of all three with a tidy idiom called <em>copy-and-swap</em>. It makes a copy of <code>other</code> using the copy constructor, then swaps the insides of <code>*this</code> with the copy. Now <code>*this</code> has the new contents, and the local variable <code>copy</code> holds our old block, which its destructor frees as the function returns. (<code>this</code> is a pointer to the object the member function was called on; <code>*this</code> is that object.)</p>
+<p>We have now written three functions that manage the block: a destructor, a copy constructor, and a copy assignment operator. They travel together.</p>
+<blockquote>
+<p><strong>The rule of three.</strong> If a class needs a hand-written destructor, copy constructor, or copy assignment operator, it almost certainly needs all three.</p>
+</blockquote>
+<p>The reasoning: needing any one of them means that the class owns something that member-by-member handling gets wrong. The other two then get it wrong as well.</p>
+</section>
+<section id="sec:move" class="level2">
+<h2><span class="secnum">3.4</span> Moving</h2>
+<p>Copying is now correct. It is also sometimes wasteful. Consider a function that builds a vector and returns it.</p>
+<div class="listing"><div class="listing-file">code/ch03/intvec_test.cpp</div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>IntVec squares<span class="op">(</span><span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    IntVec result<span class="op">;</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> result<span class="op">.</span>push_back<span class="op">(</span>i <span class="op">*</span> i<span class="op">);</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> result<span class="op">;</span>   <span class="co">// moved (or constructed in place), not copied</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>When <code>squares(1000000)</code> returns, the local <code>result</code> is about to be destroyed. It would be absurd to copy its million elements into the caller’s variable and then immediately throw the original away. The caller could simply <em>take over</em> the block.</p>
+<p>That is a <strong>move</strong>. Since C++11 a class can define what it means to be moved from, with two more special member functions.</p>
+<div class="listing"><div class="listing-file">code/ch03/intvec.hpp</div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Move constructor: take over other&#39;s block; leave other empty.</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>IntVec<span class="op">(</span>IntVec<span class="op">&amp;&amp;</span> other<span class="op">)</span> <span class="kw">noexcept</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">:</span> <span class="va">data_</span><span class="op">(</span>other<span class="op">.</span><span class="va">data_</span><span class="op">),</span> <span class="va">size_</span><span class="op">(</span>other<span class="op">.</span><span class="va">size_</span><span class="op">),</span> <span class="va">capacity_</span><span class="op">(</span>other<span class="op">.</span><span class="va">capacity_</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    other<span class="op">.</span><span class="va">data_</span> <span class="op">=</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    other<span class="op">.</span><span class="va">size_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    other<span class="op">.</span><span class="va">capacity_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Move assignment: release our block, then take over other&#39;s.</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>IntVec<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>IntVec<span class="op">&amp;&amp;</span> other<span class="op">)</span> <span class="kw">noexcept</span> <span class="op">{</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="kw">this</span> <span class="op">!=</span> <span class="op">&amp;</span>other<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>        <span class="kw">delete</span><span class="op">[]</span> <span class="va">data_</span><span class="op">;</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>        <span class="va">data_</span> <span class="op">=</span> other<span class="op">.</span><span class="va">data_</span><span class="op">;</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        <span class="va">size_</span> <span class="op">=</span> other<span class="op">.</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>        <span class="va">capacity_</span> <span class="op">=</span> other<span class="op">.</span><span class="va">capacity_</span><span class="op">;</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>        other<span class="op">.</span><span class="va">data_</span> <span class="op">=</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        other<span class="op">.</span><span class="va">size_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>        other<span class="op">.</span><span class="va">capacity_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The parameter type <code>IntVec&amp;&amp;</code>, with two ampersands, is an <em>rvalue reference</em>. For our purposes it means: “an object that is about to be discarded, whose contents I am therefore allowed to take.” The move constructor copies the three members, which costs three machine words, and then sets <code>other</code> to the empty state so that its destructor will not free the block we just took. No elements are touched. Moving a vector of a million elements costs the same as moving a vector of none.</p>
+<p>The compiler uses these automatically wherever it can see that the source is a temporary or is about to go out of scope, as with <code>return result;</code>. When you want to move from a named object that the compiler would otherwise copy, you say so with <code>std::move</code>.</p>
+<div class="listing"><div class="listing-file">code/ch03/intvec_test.cpp</div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>IntVec d <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>b<span class="op">);</span>   <span class="co">// move constructor: d takes b&#39;s block</span></span></code></pre></div>
+</div>
+<p>Despite its name, <code>std::move</code> moves nothing. It is a cast, a note to the compiler that says “I am finished with <code>b</code>; you may treat it as discardable.” After the move, <code>b</code> is still a valid object (its invariant holds) but its contents are gone. The only sensible things to do with a moved-from object are to destroy it or assign it a new value.</p>
+<p>The <code>noexcept</code> on both functions promises that they will not throw exceptions. That promise matters more than it looks. When a <code>std::vector&lt;IntVec&gt;</code> grows, it will <em>move</em> its elements to the new block only if their move constructor is <code>noexcept</code>; otherwise it falls back to copying, to be safe. Forgetting the keyword silently costs performance.</p>
+<p>With five special members, the rule of three becomes the <strong>rule of five</strong>: destructor, copy constructor, copy assignment, move constructor, move assignment. If you write one, consider all five.</p>
+<section id="sec:rule-of-zero" class="level3 unnumbered">
+<h3 class="unnumbered">The rule of zero</h3>
+<p>Having learned to write all five, you should now learn when to write none of them. Look at this class.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Student <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string name<span class="op">;</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> scores<span class="op">;</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>It has no destructor, no copy constructor, nothing. And it is entirely correct. The compiler-generated versions copy, move, and destroy member by member, and each <em>member</em> knows how to copy, move, and destroy itself properly. A <code>Student</code> can be copied (deeply), moved (cheaply), and destroyed (without leaks) for free.</p>
+<blockquote>
+<p><strong>The rule of zero.</strong> If every member of a class manages itself, write none of the five special member functions.</p>
+</blockquote>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>The rule of zero has one trap. The compiler-generated <em>move</em> moves each member, and moving a plain number just copies it. If a class keeps a count beside a container, say a <code>std::vector</code> and a separate <code>std::size_t</code> recording how many slots are in use, then after a move the source’s vector is empty but its count is not. The C++ convention is that a moved-from object need only be safe to destroy or to assign a new value to, and that is all the classes in this book promise unless they say otherwise. Do not go on using an object you have moved from.</p>
+</aside>
+<p>This is the rule for nearly every class you will write outside this course. Build your classes from <code>vector</code>, <code>string</code>, and other self-managing types, and all the machinery of this section happens for you. The handful of classes that must follow the rule of five are the ones that directly own a raw resource, such as the containers in this book. That is the reason for building them: so that you understand what the self-managing types are doing on your behalf.</p>
+<aside class="callout byhand"><p class="callout-title"><span class="lab">By hand first</span></p>
+<p>Before you study the copy and move functions in <code>intvec.hpp</code> closely, close the book and write all five special members for <code>IntVec</code> yourself, with a small <code>main</code> that exercises each one, and run it under the sanitizers until it is clean. You will get something wrong: forget to null out the source of a move, mishandle self-assignment, leak the old block in assignment. Each of those mistakes, caught by AddressSanitizer and then understood, teaches a piece of C++’s object model that no amount of reading does.</p>
+<p>This is also the first place in the course where asking a model to write the code is seriously tempting, because the functions are fiddly and a model writes them flawlessly. That is exactly why it is the wrong place. The fiddliness <em>is</em> the content.</p>
+</aside>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Once you have a version that you believe works, use a model as a critic:</p>
+<blockquote>
+<p>Here is a C++ class that owns a heap array. Do not rewrite it. For each of the five special member functions, tell me whether it is present and correct. If one is wrong, describe the bug and give me a short test program that would expose it under AddressSanitizer.</p>
+</blockquote>
+<p>Run the test programs it gives you. If one of them does <em>not</em> fail, the model’s claim was wrong, and you have learned something about both your code and the model.</p>
+</aside>
+</section>
+</section>
+<section id="sec:templates" class="level2">
+<h2><span class="secnum">3.5</span> Templates and iterators</h2>
+<p><code>IntVec</code> holds <code>int</code>s. Nothing about its logic depends on that. A vector of <code>double</code>s or of <code>std::string</code>s would have the same three members and the same functions, with one type changed throughout. C++ lets you write the class once, with the element type left as a parameter.</p>
+<div class="listing"><div class="listing-file">code/ch03/vec.hpp</div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Vec <span class="op">{</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    Vec<span class="op">()</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    Vec<span class="op">(</span><span class="bu">std::</span>initializer_list<span class="op">&lt;</span>T<span class="op">&gt;</span> items<span class="op">)</span> <span class="op">{</span>   <span class="co">// allows  Vec&lt;int&gt; v{1, 2, 3};</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        Vec built<span class="op">;</span>                          <span class="co">// owns the block while we fill it</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>        built<span class="op">.</span>reserve<span class="op">(</span>items<span class="op">.</span>size<span class="op">());</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="at">const</span> T<span class="op">&amp;</span> item <span class="op">:</span> items<span class="op">)</span> built<span class="op">.</span>push_back<span class="op">(</span>item<span class="op">);</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>        swap<span class="op">(</span>built<span class="op">);</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span></code></pre></div>
+</div>
+<p><code>template &lt;typename T&gt;</code> makes <code>Vec</code> a <strong>class template</strong>: a pattern from which the compiler generates a separate class for each element type you ask for. <code>Vec&lt;int&gt;</code> and <code>Vec&lt;std::string&gt;</code> are different classes, each compiled as if you had written it by hand with <code>T</code> replaced. This is quite different from generics in Java, where one compiled class serves all element types by treating them as references to objects. A C++ <code>Vec&lt;int&gt;</code> stores actual <code>int</code>s, side by side, with no indirection: the template costs nothing at run time.</p>
+<p>One practical consequence is that the compiler needs to see the whole template wherever it is used, so templates live entirely in header files. That is why the code for this chapter is in <code>vec.hpp</code> and not split into a header and a source file.</p>
+<p>The complete <code>Vec&lt;T&gt;</code> is in <code>code/ch03/vec.hpp</code>. It is <code>IntVec</code> with <code>int</code> replaced by <code>T</code>, plus the additions discussed below.</p>
+<aside class="callout note"><p class="callout-title"><span class="lab">Aside</span></p>
+<p>Our <code>Vec</code> takes one shortcut that the real <code>std::vector</code> does not. It allocates its block with <code>new T[capacity]</code>, which creates <code>capacity</code> fully formed <code>T</code> objects at once, including the spare ones. That requires <code>T</code> to have a default constructor, and it means the spare slots hold real (default-valued) objects. <code>std::vector</code> instead allocates <em>raw</em> memory and constructs each element individually at the moment it is added, using lower-level tools that are beyond this course. The costs and the interface are the same; the bookkeeping is more delicate. Our <code>Vec</code> is also less careful than the real thing about <em>exceptions</em>: if copying an element fails partway through a reallocation (a <code>std::string</code> running out of memory, say), <code>std::vector</code> guarantees that nothing is leaked and the vector is unchanged, and achieving that takes more machinery than we show.</p>
+</aside>
+<section id="sec:sink" class="level3 unnumbered">
+<h3 class="unnumbered">Passing elements efficiently</h3>
+<div class="listing"><div class="listing-file">code/ch03/vec.hpp</div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> push_back<span class="op">(</span>T value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="va">size_</span> <span class="op">==</span> <span class="va">capacity_</span><span class="op">)</span> reserve<span class="op">(</span><span class="va">capacity_</span> <span class="op">==</span> <span class="dv">0</span> <span class="op">?</span> <span class="dv">1</span> <span class="op">:</span> <span class="dv">2</span> <span class="op">*</span> <span class="va">capacity_</span><span class="op">);</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="va">data_</span><span class="op">[</span><span class="va">size_</span><span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">);</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>When <code>T</code> was <code>int</code>, passing by value was obviously fine. For a <code>T</code> like <code>std::string</code>, we would like to avoid copying when we can. This version takes the parameter by value and then <em>moves</em> it into the block. If the caller passes a temporary, such as <code>words.push_back("word" + suffix)</code>, the temporary is moved into <code>value</code> and then moved into the block: no copy at all. If the caller passes a named variable, it is copied once into <code>value</code> (as it must be; the caller still wants its own) and then moved. The growing logic has been factored into <code>reserve</code>, which also uses <code>std::move</code> to transfer elements to the new block.</p>
+<p>Assignment gets the same treatment, and the result is pleasingly short.</p>
+<div class="listing"><div class="listing-file">code/ch03/vec.hpp</div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co">// One assignment operator for both copy and move. The parameter is</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="co">// taken by value: the caller&#39;s argument is copied (or moved) into</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="co">// `other`, we swap with it, and its destructor cleans up our old block.</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>Vec<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span>Vec other<span class="op">)</span> <span class="kw">noexcept</span> <span class="op">{</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    swap<span class="op">(</span>other<span class="op">);</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Because the parameter is taken by value, the caller’s argument is copied <em>or moved</em> into <code>other</code>, whichever is appropriate, before the function body runs. Then we swap. One function serves as both copy assignment and move assignment.</p>
+</section>
+<section id="sec:insert-erase" class="level3 unnumbered">
+<h3 class="unnumbered">Insert and erase</h3>
+<p>A vector’s elements are contiguous and in order. That is the source of its speed, and it has a price: putting a new element anywhere but the end means making a gap, and removing one means closing a gap.</p>
+<div class="listing"><div class="listing-file">code/ch03/vec.hpp</div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Insert value so that it ends up at position `index`.</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="co">// Precondition: index &lt;= size(). Everything from index on moves right.</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> insert<span class="op">(</span><span class="bu">std::</span>size_t index<span class="op">,</span> T value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(</span>index <span class="op">&lt;=</span> <span class="va">size_</span><span class="op">);</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="va">size_</span> <span class="op">==</span> <span class="va">capacity_</span><span class="op">)</span> reserve<span class="op">(</span><span class="va">capacity_</span> <span class="op">==</span> <span class="dv">0</span> <span class="op">?</span> <span class="dv">1</span> <span class="op">:</span> <span class="dv">2</span> <span class="op">*</span> <span class="va">capacity_</span><span class="op">);</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="va">size_</span><span class="op">;</span> i <span class="op">&gt;</span> index<span class="op">;</span> <span class="op">--</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">data_</span><span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span><span class="va">data_</span><span class="op">[</span>i <span class="op">-</span> <span class="dv">1</span><span class="op">]);</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    <span class="va">data_</span><span class="op">[</span>index<span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>value<span class="op">);</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a><span class="co">// Remove the element at position `index`.</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a><span class="co">// Precondition: index &lt; size(). Everything after it moves left.</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> erase<span class="op">(</span><span class="bu">std::</span>size_t index<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(</span>index <span class="op">&lt;</span> <span class="va">size_</span><span class="op">);</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> index<span class="op">;</span> i <span class="op">+</span> <span class="dv">1</span> <span class="op">&lt;</span> <span class="va">size_</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>        <span class="va">data_</span><span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span><span class="va">data_</span><span class="op">[</span>i <span class="op">+</span> <span class="dv">1</span><span class="op">]);</span></span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">--</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<figure class="fig" id="fig:insert-shift"><svg class="figsvg" viewBox="0 0 640 200" width="640" height="200" role="img" aria-label="Inserting 25 at index 2 shifts the later elements right by one." xmlns="http://www.w3.org/2000/svg">
+<text class="t-ink b" x="136.0" y="66.0" text-anchor="end" dominant-baseline="central" font-size="12">before</text>
+<rect class="s-ink f-none" x="150" y="48" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="173.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">10</text>
+<text class="t-muted mono" x="173.0" y="95.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-ink f-none" x="196" y="48" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="219.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">20</text>
+<text class="t-muted mono" x="219.0" y="95.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-ink f-accent2-soft" x="242" y="48" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="265.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">30</text>
+<text class="t-muted mono" x="265.0" y="95.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-accent2-soft" x="288" y="48" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="311.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">40</text>
+<text class="t-muted mono" x="311.0" y="95.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-accent2-soft" x="334" y="48" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="357.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">50</text>
+<text class="t-muted mono" x="357.0" y="95.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-muted-soft" x="380" y="48" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="403.0" y="95.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-muted-soft" x="426" y="48" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="449.0" y="95.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-muted-soft" x="472" y="48" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="495.0" y="95.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<path class="s-accent2 f-none" d="M357.0,46.0 Q380.0,18.0 403.0,46.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="403.0,46.0 400.1,36.8 394.5,41.3"/>
+<text class="t-accent2" x="380.0" y="14.0" text-anchor="middle" dominant-baseline="central" font-size="10">1st</text>
+<path class="s-accent2 f-none" d="M311.0,46.0 Q334.0,18.0 357.0,46.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="357.0,46.0 354.1,36.8 348.5,41.3"/>
+<text class="t-accent2" x="334.0" y="14.0" text-anchor="middle" dominant-baseline="central" font-size="10">2nd</text>
+<path class="s-accent2 f-none" d="M265.0,46.0 Q288.0,18.0 311.0,46.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="311.0,46.0 308.1,36.8 302.5,41.3"/>
+<text class="t-accent2" x="288.0" y="14.0" text-anchor="middle" dominant-baseline="central" font-size="10">3rd</text>
+<text class="t-ink b" x="136.0" y="152.0" text-anchor="end" dominant-baseline="central" font-size="12">after</text>
+<rect class="s-ink f-none" x="150" y="134" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="173.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="14">10</text>
+<text class="t-muted mono" x="173.0" y="181.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-ink f-none" x="196" y="134" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="219.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="14">20</text>
+<text class="t-muted mono" x="219.0" y="181.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-ink f-accent-soft" x="242" y="134" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="265.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="14">25</text>
+<text class="t-muted mono" x="265.0" y="181.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-none" x="288" y="134" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="311.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="14">30</text>
+<text class="t-muted mono" x="311.0" y="181.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-none" x="334" y="134" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="357.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="14">40</text>
+<text class="t-muted mono" x="357.0" y="181.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-none" x="380" y="134" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="403.0" y="152.0" text-anchor="middle" dominant-baseline="central" font-size="14">50</text>
+<text class="t-muted mono" x="403.0" y="181.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-muted-soft" x="426" y="134" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="449.0" y="181.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-muted-soft" x="472" y="134" width="46" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="495.0" y="181.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<text class="t-accent mono" x="265.0" y="118.0" text-anchor="middle" dominant-baseline="central" font-size="12">insert(2, 25)</text>
+</svg><figcaption>
+<span class="fignum">Figure 3.4</span> Inserting 25 at index 2. Every element from that position onward must first move one slot to the right, starting from the far end so that nothing is overwritten.
+</figcaption></figure>
+<p>The loop in <code>insert</code> runs from the back toward <code>index</code>, as <a href="#fig:insert-shift">Figure 3.4</a> shows; run it front to back and each element would overwrite the next before it had been moved. Inserting at position <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> in a vector of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements moves <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mi>i</mi></mrow><annotation encoding="application/x-tex">n - i</annotation></semantics></math> elements. At the end, that is zero. At the front, it is all of them.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>v[i]</code>, <code>at(i)</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>push_back</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> amortized; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> worst case</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>pop_back</code></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>insert</code> or <code>erase</code> at index <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>−</mo><mi>i</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n - i)</annotation></semantics></math>: constant at the back, linear at the front</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">searching for a value</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>, or <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math> if kept sorted</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">copy</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">move</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+</tr>
+</tbody>
+</table>
+<p>That fourth row is the vector’s one real weakness, and the motivation for the linked structures of the next chapter.</p>
+</section>
+<section id="sec:iterators" class="level3 unnumbered">
+<h3 class="unnumbered">Iterators</h3>
+<p>How should code outside the class visit every element? Indexing works for a vector, but not every container can be indexed efficiently. The C++ library’s answer is the <strong>iterator</strong>: an object that marks a position in a container and can be advanced to the next position. Every container provides two.</p>
+<ul>
+<li><code>begin()</code> returns an iterator to the first element.</li>
+<li><code>end()</code> returns an iterator to the position <em>one past</em> the last element.</li>
+</ul>
+<p>Together they describe a half-open range, exactly like <code>[lo, hi)</code> in binary search. An iterator supports <code>*it</code> to reach the element, <code>++it</code> to advance, and <code>!=</code> to compare. If that list of operations sounds familiar, it should. A pointer into an array supports all of them. For a vector, whose elements are contiguous, a plain pointer <em>is</em> a perfectly good iterator.</p>
+<div class="listing"><div class="listing-file">code/ch03/vec.hpp</div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>T<span class="op">*</span> begin<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">data_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>T<span class="op">*</span> end<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">data_</span> <span class="op">+</span> <span class="va">size_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> T<span class="op">*</span> begin<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">data_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> T<span class="op">*</span> end<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">data_</span> <span class="op">+</span> <span class="va">size_</span><span class="op">;</span> <span class="op">}</span></span></code></pre></div>
+</div>
+<p>Those four one-line functions buy a great deal. The range-based <code>for</code> loop is defined in terms of <code>begin()</code> and <code>end()</code>, so it now works on our class:</p>
+<div class="listing"><div class="listing-file">code/ch03/vec_test.cpp</div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> total <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> v<span class="op">)</span> total <span class="op">+=</span> x<span class="op">;</span></span></code></pre></div>
+</div>
+<p>And so does the whole standard library of algorithms, which are written to operate on <em>any</em> pair of iterators, from any container.</p>
+<div class="listing"><div class="listing-file">code/ch03/vec_test.cpp</div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>Vec<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> nums<span class="op">{</span><span class="dv">31</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">15</span><span class="op">,</span> <span class="dv">9</span><span class="op">,</span> <span class="dv">26</span><span class="op">};</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>sort<span class="op">(</span>nums<span class="op">.</span>begin<span class="op">(),</span> nums<span class="op">.</span>end<span class="op">());</span>              <span class="co">// {4, 9, 15, 26, 31}</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> where <span class="op">=</span> <span class="bu">std::</span>find<span class="op">(</span>nums<span class="op">.</span>begin<span class="op">(),</span> nums<span class="op">.</span>end<span class="op">(),</span> <span class="dv">15</span><span class="op">);</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>where <span class="op">!=</span> nums<span class="op">.</span>end<span class="op">()</span> <span class="op">&amp;&amp;</span> where <span class="op">-</span> nums<span class="op">.</span>begin<span class="op">()</span> <span class="op">==</span> <span class="dv">2</span><span class="op">);</span></span></code></pre></div>
+</div>
+<p><code>std::sort</code> and <code>std::find</code> have never heard of <code>Vec</code>. They were handed two pointers and asked to work on the range between them. This separation of algorithms from containers, with iterators as the connecting interface, was the founding idea of the Standard Template Library <span class="citation" data-cites="stepanov1995">(<a href="#ref-stepanov1995" role="doc-biblioref">Stepanov and Lee 1995</a>)</span>, and it is why learning the iterator conventions pays off across all of C++.</p>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>An iterator, pointer, or reference to a vector element is an address inside the vector’s current block. When the vector grows, that block is deleted. Every iterator, pointer, and reference into it is left dangling. This is called <strong>invalidation</strong>, and it is the classic <code>std::vector</code> bug.</p>
+<div class="listing"><div class="listing-file">code/ch03/bugs/invalidate.cpp</div>
+<div class="sourceCode" id="cb22"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;vector&gt;</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> v<span class="op">{</span><span class="dv">10</span><span class="op">,</span> <span class="dv">20</span><span class="op">,</span> <span class="dv">30</span><span class="op">};</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">&amp;</span> first <span class="op">=</span> v<span class="op">[</span><span class="dv">0</span><span class="op">];</span>          <span class="co">// a reference into the vector&#39;s block</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>        v<span class="op">.</span>push_back<span class="op">(</span>i<span class="op">);</span>         <span class="co">// sooner or later: a new, bigger block</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>    first <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>                 <span class="co">// writes into the OLD block, long since freed</span></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> v<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<pre class="console"><code>==26591==ERROR: AddressSanitizer: heap-use-after-free on address 0x502000000010
+WRITE of size 4 at 0x502000000010 thread T0
+    #0 0x5cc0fc8e69ff in main ch03/bugs/invalidate.cpp:12</code></pre>
+<p>The rule: after any operation that might change a vector’s capacity (<code>push_back</code>, <code>insert</code>, <code>reserve</code>), or that shifts elements (<code>insert</code>, <code>erase</code>), do not use iterators, pointers, or references obtained before it. Indices remain meaningful; addresses do not. This also means you must never <code>push_back</code> onto a vector inside a range-<code>for</code> loop over the same vector.</p>
+</aside>
+</section>
+</section>
+<section id="sec:vec-testing" class="level2">
+<h2><span class="secnum">3.6</span> How do you know?</h2>
+<p>We have a container with a dozen operations, several of which rearrange memory. How confident should we be that it is right, and where does the confidence come from?</p>
+<p>Start with the invariant. We wrote it down in English at the beginning of the chapter. Here is part of it as code.</p>
+<div class="listing"><div class="listing-file">code/ch03/vec.hpp</div>
+<div class="sourceCode" id="cb24"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co">// The representation invariant, as executable code.</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> check_invariant<span class="op">()</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="va">size_</span> <span class="op">&gt;</span> <span class="va">capacity_</span><span class="op">)</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">((</span><span class="va">capacity_</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">!=</span> <span class="op">(</span><span class="va">data_</span> <span class="op">==</span> <span class="kw">nullptr</span><span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Not everything in the English version can be checked from inside the object. There is no portable way to ask whether a pointer really refers to a block of the claimed size, which is what the sanitizer is for. But what can be checked should be, after every operation in the tests.</p>
+<p>Next, a reference. <code>std::vector</code> already exists and is trusted. If we perform the same sequence of operations on a <code>Vec&lt;int&gt;</code> and on a <code>std::vector&lt;int&gt;</code>, they should contain the same elements afterward, every time.</p>
+<div class="listing"><div class="listing-file">code/ch03/vec_test.cpp</div>
+<div class="sourceCode" id="cb25"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Do our Vec and the reference std::vector hold the same sequence?</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> same<span class="op">(</span><span class="at">const</span> Vec<span class="op">&lt;</span>T<span class="op">&gt;&amp;</span> ours<span class="op">,</span> <span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;&amp;</span> ref<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>ours<span class="op">.</span>check_invariant<span class="op">())</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>ours<span class="op">.</span>size<span class="op">()</span> <span class="op">!=</span> ref<span class="op">.</span>size<span class="op">())</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> ref<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>ours<span class="op">[</span>i<span class="op">]</span> <span class="op">!=</span> ref<span class="op">[</span>i<span class="op">])</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>And finally, volume. Instead of hand-writing a few sequences of operations, generate them at random, by the thousand.</p>
+<div class="listing"><div class="listing-file">code/ch03/vec_test.cpp</div>
+<div class="sourceCode" id="cb26"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Apply the same random operations to both; they must never disagree.</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> fuzz<span class="op">(</span><span class="dt">unsigned</span> seed<span class="op">,</span> <span class="dt">int</span> steps<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>mt19937 rng<span class="op">(</span>seed<span class="op">);</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    Vec<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> ours<span class="op">;</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> ref<span class="op">;</span></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> step <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> step <span class="op">&lt;</span> steps<span class="op">;</span> <span class="op">++</span>step<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> value <span class="op">=</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>rng<span class="op">()</span> <span class="op">%</span> <span class="dv">1000</span><span class="op">);</span></span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">switch</span> <span class="op">(</span>rng<span class="op">()</span> <span class="op">%</span> <span class="dv">6</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">0</span><span class="op">:</span></span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">1</span><span class="op">:</span>   <span class="co">// push_back is the common case, so give it two slots</span></span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a>            ours<span class="op">.</span>push_back<span class="op">(</span>value<span class="op">);</span></span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>            ref<span class="op">.</span>push_back<span class="op">(</span>value<span class="op">);</span></span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">2</span><span class="op">:</span></span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(!</span>ref<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a>                ours<span class="op">.</span>pop_back<span class="op">();</span></span>
+<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a>                ref<span class="op">.</span>pop_back<span class="op">();</span></span>
+<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">3</span><span class="op">:</span> <span class="op">{</span></span>
+<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a>            <span class="bu">std::</span>size_t at <span class="op">=</span> rng<span class="op">()</span> <span class="op">%</span> <span class="op">(</span>ref<span class="op">.</span>size<span class="op">()</span> <span class="op">+</span> <span class="dv">1</span><span class="op">);</span>   <span class="co">// may equal size()</span></span>
+<span id="cb26-23"><a href="#cb26-23" aria-hidden="true" tabindex="-1"></a>            ours<span class="op">.</span>insert<span class="op">(</span>at<span class="op">,</span> value<span class="op">);</span></span>
+<span id="cb26-24"><a href="#cb26-24" aria-hidden="true" tabindex="-1"></a>            ref<span class="op">.</span>insert<span class="op">(</span>ref<span class="op">.</span>begin<span class="op">()</span> <span class="op">+</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>ptrdiff_t<span class="op">&gt;(</span>at<span class="op">),</span> value<span class="op">);</span></span>
+<span id="cb26-25"><a href="#cb26-25" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb26-26"><a href="#cb26-26" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb26-27"><a href="#cb26-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">4</span><span class="op">:</span></span>
+<span id="cb26-28"><a href="#cb26-28" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(!</span>ref<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb26-29"><a href="#cb26-29" aria-hidden="true" tabindex="-1"></a>                <span class="bu">std::</span>size_t at <span class="op">=</span> rng<span class="op">()</span> <span class="op">%</span> ref<span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb26-30"><a href="#cb26-30" aria-hidden="true" tabindex="-1"></a>                ours<span class="op">.</span>erase<span class="op">(</span>at<span class="op">);</span></span>
+<span id="cb26-31"><a href="#cb26-31" aria-hidden="true" tabindex="-1"></a>                ref<span class="op">.</span>erase<span class="op">(</span>ref<span class="op">.</span>begin<span class="op">()</span> <span class="op">+</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>ptrdiff_t<span class="op">&gt;(</span>at<span class="op">));</span></span>
+<span id="cb26-32"><a href="#cb26-32" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb26-33"><a href="#cb26-33" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb26-34"><a href="#cb26-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">5</span><span class="op">:</span></span>
+<span id="cb26-35"><a href="#cb26-35" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(!</span>ref<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb26-36"><a href="#cb26-36" aria-hidden="true" tabindex="-1"></a>                <span class="bu">std::</span>size_t at <span class="op">=</span> rng<span class="op">()</span> <span class="op">%</span> ref<span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb26-37"><a href="#cb26-37" aria-hidden="true" tabindex="-1"></a>                ours<span class="op">[</span>at<span class="op">]</span> <span class="op">=</span> value<span class="op">;</span></span>
+<span id="cb26-38"><a href="#cb26-38" aria-hidden="true" tabindex="-1"></a>                ref<span class="op">[</span>at<span class="op">]</span> <span class="op">=</span> value<span class="op">;</span></span>
+<span id="cb26-39"><a href="#cb26-39" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb26-40"><a href="#cb26-40" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb26-41"><a href="#cb26-41" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb26-42"><a href="#cb26-42" aria-hidden="true" tabindex="-1"></a>        <span class="ot">assert</span><span class="op">(</span>same<span class="op">(</span>ours<span class="op">,</span> ref<span class="op">));</span></span>
+<span id="cb26-43"><a href="#cb26-43" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb26-44"><a href="#cb26-44" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>This is the differential testing of <a href="02-cost.html#sec:binary-search">Section 2.4</a>, now applied to a whole data structure: a random sequence of operations, mirrored on a reference implementation, with a comparison after every step. The test for this chapter runs 200 such sequences of 400 operations each. All 80,000 operations run under AddressSanitizer, so a test passes only if the answers were right <em>and</em> no memory was misused on the way.</p>
+<p>A few design points are worth copying into your own tests.</p>
+<ul>
+<li><strong>Small values, small sizes.</strong> Insert positions are chosen from <code>0</code> to <code>size()</code> <em>inclusive</em>, so the edge cases (front, back, empty) come up constantly.</li>
+<li><strong>Weight the operations.</strong> <code>push_back</code> gets two of the six slots, so the vector tends to grow and exercise reallocation, not hover near empty.</li>
+<li><strong>Use a seed.</strong> The random generator is seeded with a known number, so a failure can be reproduced exactly by rerunning with the same seed.</li>
+<li><strong>Check after every step.</strong> When the assertion fires, the bug is in the operation that just ran.</li>
+</ul>
+<p>How good is the test? There is a direct way to find out: break the code on purpose. Change <code>i &gt; index</code> to <code>i &gt;= index</code> in <code>insert</code>, or delete the <code>++size_</code>, and run the test. If it still passes, the test is not looking where you thought it was. Deliberately injecting bugs to evaluate a test suite is called <em>mutation testing</em>, and it is the answer to “how do you know?” asked one level up: how do you know your tests would notice?</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Models are good at proposing test cases, and a useful second opinion on what you have forgotten to test.</p>
+<blockquote>
+<p>Here is the public interface of a vector class I wrote, and the tests I have so far. List specific cases my tests do not cover. Do not write the tests; describe each case in one sentence.</p>
+</blockquote>
+<p>Then write those tests yourself. And be wary of the reverse arrangement, in which a model writes both the code and its tests. Tests written by the author of the code tend to share the author’s blind spots, and that is as true of a model as of a person. A differential test against an independent reference has no such blind spot, which is why this book leans on it.</p>
+</aside>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">Vec&lt;T&gt;, and std::vector</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+The object is three words: a pointer, a size, a capacity. The elements are in one contiguous heap block that the object owns. The block is replaced by a larger one when it fills.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+<code>size &lt;= capacity</code>; elements <code>0</code> through <code>size - 1</code> are the contents, in order, contiguous. Any operation that may reallocate or shift elements invalidates iterators, pointers, and references into the vector.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Indexing: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>. <code>push_back</code>: amortized <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> with geometric growth, though a single call can be <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>. Insert or erase at position <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>−</mo><mi>i</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n - i)</annotation></semantics></math>. Copy: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>; move: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>. Space: up to twice what the elements need. Cache behavior: as good as it gets.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+An executable invariant check; differential testing against <code>std::vector</code> on random operation sequences; AddressSanitizer running under all of it; and mutation testing to check the tests.
+</dd>
+</dl>
+</aside>
+</section>
+<section id="sec:vector-ex" class="level2 unnumbered">
+<h2 class="unnumbered">Exercises</h2>
+<ol type="1">
+<li><p>Starting from an empty <code>IntVec</code>, list the capacity after each of the first ten calls to <code>push_back</code>. At which calls does <code>grow</code> run, and how many elements does each copy?</p></li>
+<li><p>Using the coin argument, explain why charging <em>two</em> coins per <code>push_back</code> is not enough to pay for doubling. Then find the smallest number of coins per <code>push_back</code> that suffices when the growth factor is 1.5, and when it is 3.</p></li>
+<li><p><code>Vec::pop_back</code> never releases memory. Suppose we “fix” this by halving the capacity whenever the vector becomes exactly half full. Describe a sequence of <code>push_back</code> and <code>pop_back</code> calls, starting from a full vector of capacity <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math>, in which <em>every</em> call triggers a reallocation. What is the amortized cost per operation in that sequence? What shrinking rule avoids the problem? (Hint: shrink at one quarter.)</p></li>
+<li><p>Add <code>void resize(std::size_t n)</code> to <code>IntVec</code>: afterward the size is <code>n</code>; if the vector grew, the new elements are zero. Add <code>void shrink_to_fit()</code>, which reallocates so that capacity equals size. State which parts of the invariant each must be careful to restore.</p></li>
+<li><p>What does this print, and why? What would it print if <code>IntVec</code> had no user-written copy constructor (assuming the program did not crash)?</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>IntVec a<span class="op">;</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>a<span class="op">.</span>push_back<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>IntVec b <span class="op">=</span> a<span class="op">;</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>b<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> a<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39; &#39;</span> <span class="op">&lt;&lt;</span> b<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span></code></pre></div></li>
+<li><p>In <code>IntVec</code>’s copy assignment operator, what specifically goes wrong on <code>a = a</code> if you remove the <code>if (this != &amp;other)</code> test <em>and</em> replace the copy-and-swap body with: delete the old block, allocate a new one, copy the elements from <code>other</code>?</p></li>
+<li><p>For each class, say whether it should follow the rule of zero or the rule of five, and why: (a) a <code>Matrix</code> holding <code>std::vector&lt;double&gt; cells; int rows; int cols;</code>; (b) a <code>Buffer</code> holding <code>char* bytes; std::size_t length;</code> where <code>bytes</code> was allocated with <code>new[]</code>; (c) a <code>Roster</code> holding <code>std::vector&lt;Student&gt; students; std::string course;</code>.</p></li>
+<li><p>Suppose <code>Vec::push_back</code> were declared as <code>void push_back(const T&amp; value)</code> and began by calling <code>reserve</code> when full, as ours does. Explain how <code>v.push_back(v[0])</code> could then write garbage into the vector. Why is the by-value version in this chapter immune?</p></li>
+<li><p>Implement <code>Vec&lt;T&gt;::erase(std::size_t first, std::size_t last)</code>, which removes the elements in the half-open index range <code>[first, last)</code> in a single pass, moving each later element exactly once. What is its cost? Why is calling the one-element <code>erase</code> in a loop, to remove <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> elements from the front, much worse?</p></li>
+<li><p>Write a function template <code>template &lt;typename T&gt; void remove_all(Vec&lt;T&gt;&amp; v, const T&amp; value)</code> that removes every element equal to <code>value</code> in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> total time. (Hint: keep two indices, one reading and one writing. This is the idea behind the standard library’s <code>std::erase</code>.)</p></li>
+<li><p>Add the differential-test operations <code>clear</code>, copy construction, and assignment to the <code>fuzz</code> function in <code>vec_test.cpp</code>. Then perform mutation testing: introduce each of these bugs into <code>vec.hpp</code>, one at a time, and record whether the tests catch it and how. (a) <code>reserve</code> copies only <code>size_ - 1</code> elements. (b) <code>erase</code> forgets <code>--size_</code>. (c) <code>insert</code>’s loop runs <code>i &gt; index + 1</code>. (d) the move constructor does not null out <code>other.data_</code>.</p></li>
+<li><p><strong>With a model, as examiner.</strong> Ask a model to quiz you on iterator invalidation: “Show me short snippets that use <code>std::vector</code>, one at a time, and ask me whether each one has undefined behavior due to invalidation. Don’t reveal the answer until I respond.” Do ten. Verify any answer you doubt by compiling the snippet with AddressSanitizer.</p></li>
+<li><p><strong>Lab.</strong> Implement <code>Vec&lt;T&gt;</code> yourself, from an empty file, with the full rule of five, <code>push_back</code>, <code>pop_back</code>, <code>operator[]</code>, <code>at</code>, <code>insert</code>, <code>erase</code>, <code>reserve</code>, <code>begin</code>, <code>end</code>, and <code>check_invariant</code>. Write a differential fuzz test against <code>std::vector</code> for both <code>Vec&lt;int&gt;</code> and <code>Vec&lt;std::string&gt;</code>. Then add a constructor parameter or template parameter for the growth factor, measure the time for ten million <code>push_back</code>s at factors 1.25, 1.5, 2, and 4, and report both the time and the peak capacity for each. Which factor would you choose, and what does the choice depend on?</p></li>
+</ol>
+</section>
+<section id="sec:vector-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Chapter notes</h2>
+<p>Amortized analysis was given its name and its systematic form by Tarjan <span class="citation" data-cites="tarjan1985">(<a href="#ref-tarjan1985" role="doc-biblioref">Tarjan 1985</a>)</span>; the coin argument here is the “banker’s method” from that paper. Cormen et al. <span class="citation" data-cites="clrs2022">(<a href="#ref-clrs2022" role="doc-biblioref">Cormen et al. 2022</a>)</span> devote a chapter to the technique and analyze the dynamic table, including the shrinking problem of Exercise 3, in detail.</p>
+<p>The design of <code>std::vector</code>, and of the iterator-based library around it, is due to Alexander Stepanov and his collaborators <span class="citation" data-cites="stepanov1995">(<a href="#ref-stepanov1995" role="doc-biblioref">Stepanov and Lee 1995</a>)</span>. Stroustrup’s <em>A Tour of C++</em> <span class="citation" data-cites="stroustrup2022">(<a href="#ref-stroustrup2022" role="doc-biblioref">Stroustrup 2022</a>)</span> walks through the construction of a vector class much as this chapter does, at greater speed, and is a good second account. For move semantics, rvalue references, and the many subtleties passed over here, the standard guide is Meyers’s <em>Effective Modern C++</em> <span class="citation" data-cites="meyers2014">(<a href="#ref-meyers2014" role="doc-biblioref">Meyers 2014</a>)</span>. The rules of three, five, and zero are stated in the C++ Core Guidelines <span class="citation" data-cites="coreguidelines">(<a href="#ref-coreguidelines" role="doc-biblioref">Stroustrup and Sutter 2026</a>)</span>.</p>
+<p>Testing with randomly generated inputs checked against stated properties was popularized by the QuickCheck library for Haskell <span class="citation" data-cites="claessen2000">(<a href="#ref-claessen2000" role="doc-biblioref">Claessen and Hughes 2000</a>)</span>, and the idea has since spread to every major language under the name <em>property-based testing</em>.</p>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-claessen2000" class="csl-entry" role="listitem">
+Claessen, Koen, and John Hughes. 2000. <span>“<span>QuickCheck</span>: A Lightweight Tool for Random Testing of <span>Haskell</span> Programs.”</span> In <em>Proceedings of the Fifth <span>ACM</span> <span>SIGPLAN</span> International Conference on Functional Programming (<span>ICFP</span> ’00)</em>, 268–79.
+</div>
+<div id="ref-clrs2022" class="csl-entry" role="listitem">
+Cormen, Thomas H., Charles E. Leiserson, Ronald L. Rivest, and Clifford Stein. 2022. <em>Introduction to Algorithms</em>. 4th ed. MIT Press.
+</div>
+<div id="ref-meyers2014" class="csl-entry" role="listitem">
+Meyers, Scott. 2014. <em>Effective Modern <span>C++</span></em>. O’Reilly Media.
+</div>
+<div id="ref-stepanov1995" class="csl-entry" role="listitem">
+Stepanov, Alexander, and Meng Lee. 1995. <span>“The Standard Template Library.”</span> HPL-95-11. Hewlett-Packard Laboratories.
+</div>
+<div id="ref-stroustrup2022" class="csl-entry" role="listitem">
+Stroustrup, Bjarne. 2022. <em>A Tour of <span>C++</span></em>. 3rd ed. Addison-Wesley.
+</div>
+<div id="ref-coreguidelines" class="csl-entry" role="listitem">
+Stroustrup, Bjarne, and Herb Sutter. 2026. <span>“<span>C++</span> Core Guidelines.”</span> <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines">https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines</a>.
+</div>
+<div id="ref-tarjan1985" class="csl-entry" role="listitem">
+Tarjan, Robert E. 1985. <span>“Amortized Computational Complexity.”</span> <em>SIAM Journal on Algebraic and Discrete Methods</em> 6 (2): 306–18.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="02-cost.html"><span>← Previous</span>What Does It Cost?</a>
+<a class="next" href="04-links.html"><span>Next →</span>Links, Stacks, and Queues</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+<script src="assets/viz/core.js"></script>
+<script src="assets/viz/dynarray.js"></script>
+<script>Viz.mountAll();</script>
+</body>
+</html>

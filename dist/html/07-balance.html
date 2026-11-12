@@ -1,0 +1,1040 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Balance · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-chapter">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Chapter 7: Balance</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class="current"><a href="07-balance.html"><span class="n">7</span> Balance</a>
+<ol class="secs">
+<li><a href="#sec:rotations"><span class="n">7.1</span> Rotations</a></li>
+<li><a href="#sec:avl"><span class="n">7.2</span> AVL trees</a></li>
+<li><a href="#sec:family"><span class="n">7.3</span> The family of balanced trees</a></li>
+<li><a href="#sec:btree"><span class="n">7.4</span> B-trees</a></li>
+<li><a href="#sec:ordered-maps"><span class="n">7.5</span> Ordered maps in practice</a></li>
+<li><a href="#sec:balance-ex">Exercises</a></li>
+<li><a href="#sec:balance-notes">Chapter notes</a></li>
+</ol>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:balance">
+<p class="kicker">
+Chapter 7 · Week 7
+</p>
+<h1>
+Balance
+</h1>
+</header>
+<aside class="callout goals"><p class="callout-title"><span class="lab">This week</span></p>
+<p>By the end of this week you should be able to:</p>
+<ul>
+<li>perform left and right rotations on a binary search tree, by hand and in code, and explain why they preserve the search-tree invariant;</li>
+<li>state the AVL balance condition, explain why it forces the height to be logarithmic, and rebalance a tree after an insertion or removal;</li>
+<li>describe how red-black trees and B-trees relate to AVL trees, and why B-trees suit modern memory hierarchies;</li>
+<li>use <code>std::map</code> and <code>std::set</code> for ordered queries, and choose sensibly among a hash table, a balanced tree, and a sorted vector.</li>
+</ul>
+</aside>
+<p>The binary search tree of the last chapter does everything we asked: search, insertion, removal, ordered traversal, range queries. Its one flaw is that all its costs are proportional to its height, and its height depends on the order in which the keys happened to arrive. Feed it sorted data and it becomes a linked list.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 7.1</span></p>
+<p>Here is a binary search tree built by inserting 1, 2, 3 in order: a chain leaning right, with 1 at the root. Using the same three nodes, draw a different binary search tree of height 2. Which node is the root? Which pointers changed? And could you make the change <em>without examining or moving any other part of a larger tree</em> that this chain might be a piece of?</p>
+<details class="answer"><summary>Answer</summary>
+<p>Make 2 the root, with 1 as its left child and 3 as its right. Two pointers changed: 1 no longer points to 2, and 2 now points to 1 (and whatever pointed to 1 from above must now point to 2). The change is entirely local. That local rearrangement is called a rotation, and it is the tool that every balanced binary tree is built from.</p>
+</details>
+</aside>
+<p>This chapter is about keeping trees short. The plan is to add a second invariant to the search-tree invariant, one that limits the height, and to repair it after each modification with a small amount of local surgery. A tree that does this is called <strong>self-balancing</strong>. There are many varieties. We will build one completely, the AVL tree, and then survey its relatives, including the one inside <code>std::map</code> and the one inside nearly every database.</p>
+<section id="sec:rotations" class="level2">
+<h2><span class="secnum">7.1</span> Rotations</h2>
+<p>A <strong>rotation</strong> rearranges a parent and one of its children so that the child becomes the parent, without disturbing the left-to-right order of the keys.</p>
+<figure class="fig" id="fig:rotation"><svg class="figsvg" viewBox="0 0 640 220" width="640" height="220" role="img" aria-label="A right rotation and its inverse, a left rotation." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="158.0" y1="52.0" x2="122.0" y2="88.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="182.8" y1="51.2" x2="232.0" y2="94.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="99.6" y1="113.4" x2="68.0" y2="154.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="120.4" y1="113.4" x2="152.0" y2="154.0" stroke-width="1.3"/>
+<circle class="s-accent2 f-accent2-soft" cx="170" cy="40" r="17" stroke-width="1.3"/>
+<text class="t-ink i" x="170.0" y="40.0" text-anchor="middle" dominant-baseline="central" font-size="14">y</text>
+<circle class="s-accent f-accent-soft" cx="110" cy="100" r="17" stroke-width="1.3"/>
+<text class="t-ink i" x="110.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="14">x</text>
+<polygon class="s-ink f-muted-soft" points="232.0,94.0 208.0,136.0 256.0,136.0" stroke-width="1.3"/>
+<text class="t-ink i" x="232.0" y="122.0" text-anchor="middle" dominant-baseline="central" font-size="13">C</text>
+<polygon class="s-ink f-muted-soft" points="68.0,154.0 44.0,196.0 92.0,196.0" stroke-width="1.3"/>
+<text class="t-ink i" x="68.0" y="182.0" text-anchor="middle" dominant-baseline="central" font-size="13">A</text>
+<polygon class="s-ink f-good-soft" points="152.0,154.0 128.0,196.0 176.0,196.0" stroke-width="1.3"/>
+<text class="t-ink i" x="152.0" y="182.0" text-anchor="middle" dominant-baseline="central" font-size="13">B</text>
+<line class="s-ink f-none" x1="462.0" y1="52.0" x2="498.0" y2="88.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="437.2" y1="51.2" x2="388.0" y2="94.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="499.6" y1="113.4" x2="468.0" y2="154.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="520.4" y1="113.4" x2="552.0" y2="154.0" stroke-width="1.3"/>
+<circle class="s-accent f-accent-soft" cx="450" cy="40" r="17" stroke-width="1.3"/>
+<text class="t-ink i" x="450.0" y="40.0" text-anchor="middle" dominant-baseline="central" font-size="14">x</text>
+<circle class="s-accent2 f-accent2-soft" cx="510" cy="100" r="17" stroke-width="1.3"/>
+<text class="t-ink i" x="510.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="14">y</text>
+<polygon class="s-ink f-muted-soft" points="388.0,94.0 364.0,136.0 412.0,136.0" stroke-width="1.3"/>
+<text class="t-ink i" x="388.0" y="122.0" text-anchor="middle" dominant-baseline="central" font-size="13">A</text>
+<polygon class="s-ink f-good-soft" points="468.0,154.0 444.0,196.0 492.0,196.0" stroke-width="1.3"/>
+<text class="t-ink i" x="468.0" y="182.0" text-anchor="middle" dominant-baseline="central" font-size="13">B</text>
+<polygon class="s-ink f-muted-soft" points="552.0,154.0 528.0,196.0 576.0,196.0" stroke-width="1.3"/>
+<text class="t-ink i" x="552.0" y="182.0" text-anchor="middle" dominant-baseline="central" font-size="13">C</text>
+<line class="s-ink f-none" x1="276.0" y1="78.0" x2="342.0" y2="78.0" stroke-width="1.8"/>
+<polygon class="s-none f-ink" points="348.0,78.0 339.0,74.4 339.0,81.6"/>
+<text class="t-ink" x="312.0" y="62.0" text-anchor="middle" dominant-baseline="central" font-size="12">rotate right at y</text>
+<line class="s-ink f-none" x1="348.0" y1="112.0" x2="282.0" y2="112.0" stroke-width="1.8"/>
+<polygon class="s-none f-ink" points="276.0,112.0 285.0,115.6 285.0,108.4"/>
+<text class="t-ink" x="312.0" y="128.0" text-anchor="middle" dominant-baseline="central" font-size="12">rotate left at x</text>
+<text class="t-good" x="320.0" y="206.0" text-anchor="middle" dominant-baseline="central" font-size="11">B is the only subtree that changes parent</text>
+</svg><figcaption>
+<span class="fignum">Figure 7.1</span> A right rotation at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> lifts its left child <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> into its place; a left rotation at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> undoes it. The triangles are whole subtrees, which move with their roots. The in-order sequence, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mspace width="0.167em"></mspace><mi>x</mi><mspace width="0.167em"></mspace><mi>B</mi><mspace width="0.167em"></mspace><mi>y</mi><mspace width="0.167em"></mspace><mi>C</mi></mrow><annotation encoding="application/x-tex">A\,x\,B\,y\,C</annotation></semantics></math>, is the same on both sides.
+</figcaption></figure>
+<p>Look at <a href="#fig:rotation">Figure 7.1</a>. On the left, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> is the root of some subtree and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> is its left child. <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math> is everything less than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>B</mi><annotation encoding="application/x-tex">B</annotation></semantics></math> is everything between <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math> is everything greater than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>. A <strong>right rotation</strong> at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> makes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> the root, with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> as its right child. Subtree <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math> stays under <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> and subtree <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math> stays under <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>. Only <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>B</mi><annotation encoding="application/x-tex">B</annotation></semantics></math> has to move: it was <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>’s right subtree and becomes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>’s left subtree, which is the one place a group of keys between <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> can go.</p>
+<p>Two facts make rotations the perfect repair tool.</p>
+<p><strong>A rotation preserves the search-tree invariant.</strong> Read the keys off in order on either side of the figure and you get the same sequence: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math>, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>B</mi><annotation encoding="application/x-tex">B</annotation></semantics></math>, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math>.</p>
+<p><strong>A rotation changes heights.</strong> Everything in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math> moves up one level, and everything in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math> moves down one. If the left side was too tall, a right rotation shortens it at the expense of the right.</p>
+<p>And it is cheap: three links change, regardless of the size of the tree. Here it is in code, for a tree whose nodes are owned by <code>unique_ptr</code>s, as in the last chapter.</p>
+<div class="listing"><div class="listing-file">code/ch07/avl.hpp</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Rotate right around the node that `link` owns: its left child rises</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// to take its place, and it becomes that child&#39;s right child.</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">void</span> rotate_right<span class="op">(</span>Link<span class="op">&amp;</span> link<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    Link pivot <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>link<span class="op">-&gt;</span>left<span class="op">);</span>       <span class="co">// the child that will rise</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    link<span class="op">-&gt;</span>left <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>pivot<span class="op">-&gt;</span>right<span class="op">);</span>     <span class="co">// its inner subtree changes sides</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    update<span class="op">(*</span>link<span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    pivot<span class="op">-&gt;</span>right <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>link<span class="op">);</span>           <span class="co">// the old root goes down</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    link <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>pivot<span class="op">);</span>                  <span class="co">// the pivot takes its place</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    update<span class="op">(*</span>link<span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span>rotations<span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">void</span> rotate_left<span class="op">(</span>Link<span class="op">&amp;</span> link<span class="op">)</span> <span class="op">{</span>         <span class="co">// the mirror image</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    Link pivot <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>link<span class="op">-&gt;</span>right<span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    link<span class="op">-&gt;</span>right <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>pivot<span class="op">-&gt;</span>left<span class="op">);</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    update<span class="op">(*</span>link<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    pivot<span class="op">-&gt;</span>left <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>link<span class="op">);</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    link <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>pivot<span class="op">);</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    update<span class="op">(*</span>link<span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span>rotations<span class="op">;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>As in <code>insert</code> and <code>erase</code> for the plain search tree, <code>link</code> is a reference to the owning pointer that leads to the subtree: the root pointer, or a <code>left</code> or <code>right</code> member of the node above. The four moves are a short dance of ownership, and it is worth following them with a finger on the figure. First the pivot, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>, is detached from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>, so that for a moment nobody but the local variable owns it. Then <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>B</mi><annotation encoding="application/x-tex">B</annotation></semantics></math> is moved from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>. Then <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> itself is moved to become <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>’s right child. Finally <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> is installed in the link from above. At each step every node has exactly one owner. The compiler helps here: a <code>unique_ptr</code> cannot be copied, so the code cannot accidentally leave two pointers owning the same node. (It cannot stop you from forgetting to re-attach a subtree, which would silently delete it; the tests are for that.) (The calls to <code>update</code> are bookkeeping that the next section explains.)</p>
+<p>A <strong>left rotation</strong> is the mirror image, and each undoes the other.</p>
+</section>
+<section id="sec:avl" class="level2">
+<h2><span class="secnum">7.2</span> AVL trees</h2>
+<p>Rotations are the mechanism. Now we need a policy: a precise rule for when a tree is “balanced enough” and where to rotate when it is not. The oldest such rule, and still one of the best, was published in 1962 by Georgy Adelson-Velsky and Evgenii Landis <span class="citation" data-cites="adelson1962">(<a href="#ref-adelson1962" role="doc-biblioref">Adelson-Velsky and Landis 1962</a>)</span>, after whom the <strong>AVL tree</strong> is named.</p>
+<blockquote>
+<p><strong>The AVL invariant.</strong> For every node, the heights of its left and right subtrees differ by at most one.</p>
+</blockquote>
+<p>An AVL tree is a binary search tree that also satisfies this. Note that the condition is imposed at <em>every</em> node, not just the root, and that it does not demand perfection. A node’s two subtrees may differ in height by one, and those small allowances can accumulate, so an AVL tree can be somewhat lopsided. What it cannot be is badly lopsided.</p>
+<p>To maintain the invariant cheaply, each node stores the height of its own subtree.</p>
+<div class="listing"><div class="listing-file">code/ch07/avl.hpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    K key<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> height <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>                <span class="co">// height of the subtree rooted here</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Node<span class="op">&gt;</span> left<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Node<span class="op">&gt;</span> right<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> Node<span class="op">(</span>K k<span class="op">)</span> <span class="op">:</span> key<span class="op">(</span><span class="bu">std::</span>move<span class="op">(</span>k<span class="op">))</span> <span class="op">{}</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">using</span> Link <span class="op">=</span> <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Node<span class="op">&gt;;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">int</span> height<span class="op">(</span><span class="at">const</span> Link<span class="op">&amp;</span> link<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> link <span class="op">?</span> link<span class="op">-&gt;</span>height <span class="op">:</span> <span class="dv">0</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">void</span> update<span class="op">(</span>Node<span class="op">&amp;</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    n<span class="op">.</span>height <span class="op">=</span> <span class="dv">1</span> <span class="op">+</span> <span class="bu">std::</span>max<span class="op">(</span>height<span class="op">(</span>n<span class="op">.</span>left<span class="op">),</span> height<span class="op">(</span>n<span class="op">.</span>right<span class="op">));</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="co">// Positive: left subtree is taller. Negative: right subtree is taller.</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">int</span> balance<span class="op">(</span><span class="at">const</span> Node<span class="op">&amp;</span> n<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> height<span class="op">(</span>n<span class="op">.</span>left<span class="op">)</span> <span class="op">-</span> height<span class="op">(</span>n<span class="op">.</span>right<span class="op">);</span> <span class="op">}</span></span></code></pre></div>
+</div>
+<p>The difference between the two subtree heights is called the node’s <strong>balance factor</strong>. The AVL invariant says that every balance factor is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">-1</annotation></semantics></math>, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>0</mn><annotation encoding="application/x-tex">0</annotation></semantics></math>, or <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">+1</annotation></semantics></math>.</p>
+<section id="sec:avl-height" class="level3 unnumbered">
+<h3 class="unnumbered">Why the height is logarithmic</h3>
+<p>How tall can an AVL tree with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> nodes be? It is easier to turn the question around: what is the <em>smallest</em> number of nodes an AVL tree of height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> can have? Call it <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">N(h)</annotation></semantics></math>.</p>
+<p>A tree of height 1 is a single node: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N(1) = 1</annotation></semantics></math>. A tree of height 2 needs a root and at least one child: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>2</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">N(2) = 2</annotation></semantics></math>. For a taller tree, the root has one subtree of height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">h - 1</annotation></semantics></math> (or the tree would not have height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math>). To use as few nodes as possible, make the other subtree as short as the invariant allows, which is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi><mo>−</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">h - 2</annotation></semantics></math>, and make both subtrees as sparse as possible in turn. So</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mn>1</mn><mo>+</mo><mi>N</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo>−</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>+</mo><mi>N</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo>−</mo><mn>2</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">N(h) = 1 + N(h-1) + N(h-2).</annotation></semantics></math></p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math></th>
+<th style="text-align: right;">1</th>
+<th style="text-align: right;">2</th>
+<th style="text-align: right;">3</th>
+<th style="text-align: right;">4</th>
+<th style="text-align: right;">5</th>
+<th style="text-align: right;">6</th>
+<th style="text-align: right;">7</th>
+<th style="text-align: right;">8</th>
+<th style="text-align: right;">9</th>
+<th style="text-align: right;">10</th>
+<th style="text-align: right;">20</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">N(h)</annotation></semantics></math></td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">33</td>
+<td style="text-align: right;">54</td>
+<td style="text-align: right;">88</td>
+<td style="text-align: right;">143</td>
+<td style="text-align: right;">17,710</td>
+</tr>
+</tbody>
+</table>
+<p>Each entry is the sum of the two before it, plus one. That is nearly the rule for the Fibonacci numbers, and like them, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">N(h)</annotation></semantics></math> grows exponentially: each step multiplies it by about 1.618, the golden ratio. An AVL tree of height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> therefore has <em>at least</em> an exponential number of nodes, which, turned back around, says that a tree with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> nodes has height at most logarithmic in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>. Working out the constants gives</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi><mo>&lt;</mo><mn>1.45</mn><msub><mo>log</mo><mn>2</mn></msub><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>2</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">h &lt; 1.45 \log_2 (n + 2).</annotation></semantics></math></p>
+<p>An AVL tree is never more than about 45 percent taller than a perfectly balanced tree with the same number of nodes <span class="citation" data-cites="knuth1998">(<a href="#ref-knuth1998" role="doc-biblioref">Knuth 1998</a>)</span>. A million keys: height at most 28. A billion: at most 42. And this is a guarantee, for every sequence of insertions and removals, with no assumption about the input.</p>
+</section>
+<section id="sec:avl-insert" class="level3 unnumbered">
+<h3 class="unnumbered">Restoring balance after an insertion</h3>
+<p>Inserting into an AVL tree starts exactly like inserting into any binary search tree: walk down, and attach a new leaf. The new leaf may have made some subtrees one taller. The only nodes whose subtrees changed are the new leaf’s ancestors, the nodes on the path back to the root. So we retrace that path upward, and at each node we update its stored height and check its balance factor. If it has become <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>+</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">+2</annotation></semantics></math> or <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">-2</annotation></semantics></math>, we fix it on the spot.</p>
+<p>Suppose a node <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>z</mi><annotation encoding="application/x-tex">z</annotation></semantics></math> has become too tall on the left, with balance factor <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>+</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">+2</annotation></semantics></math>. Let <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> be its left child. There are two cases, depending on which of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>’s subtrees is the tall one, and <a href="#fig:avl-cases">Figure 7.2</a> shows them.</p>
+<figure class="fig" id="fig:avl-cases"><svg class="figsvg" viewBox="0 0 640 300" width="640" height="300" role="img" aria-label="The outside and inside cases of AVL rebalancing." xmlns="http://www.w3.org/2000/svg">
+<text class="t-ink b" x="20.0" y="22.0" text-anchor="start" dominant-baseline="central" font-size="13">Outside case (left-left): one rotation</text>
+<line class="s-ink f-none" x1="155.2" y1="108.9" x2="138.8" y2="129.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="189.2" y1="66.9" x2="172.8" y2="87.1" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="130" cy="140" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="130.0" y="140.0" text-anchor="middle" dominant-baseline="central" font-size="12">10</text>
+<circle class="s-ink f-paper" cx="164" cy="98" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="164.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="12">20</text>
+<text class="t-accent2 mono" x="182.0" y="86.0" text-anchor="start" dominant-baseline="central" font-size="10">+1</text>
+<circle class="s-bad f-bad-soft" cx="198" cy="56" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="198.0" y="56.0" text-anchor="middle" dominant-baseline="central" font-size="12">30</text>
+<text class="t-accent2 mono" x="216.0" y="44.0" text-anchor="start" dominant-baseline="central" font-size="10">+2</text>
+<line class="s-ink f-none" x1="250.0" y1="96.0" x2="324.0" y2="96.0" stroke-width="1.6"/>
+<polygon class="s-none f-ink" points="330.0,96.0 321.0,92.4 321.0,99.6"/>
+<text class="t-ink" x="290.0" y="82.0" text-anchor="middle" dominant-baseline="central" font-size="11">right at 30</text>
+<line class="s-ink f-none" x1="395.2" y1="80.9" x2="378.8" y2="101.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="412.8" y1="80.9" x2="429.2" y2="101.1" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="370" cy="112" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="370.0" y="112.0" text-anchor="middle" dominant-baseline="central" font-size="12">10</text>
+<circle class="s-good f-good-soft" cx="404" cy="70" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="404.0" y="70.0" text-anchor="middle" dominant-baseline="central" font-size="12">20</text>
+<text class="t-accent2 mono" x="422.0" y="58.0" text-anchor="start" dominant-baseline="central" font-size="10">0</text>
+<circle class="s-ink f-paper" cx="438" cy="112" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="438.0" y="112.0" text-anchor="middle" dominant-baseline="central" font-size="12">30</text>
+<text class="t-ink b" x="20.0" y="166.0" text-anchor="start" dominant-baseline="central" font-size="13">Inside case (left-right): two rotations</text>
+<line class="s-ink f-none" x1="68.8" y1="248.9" x2="85.2" y2="269.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="116.1" y1="203.4" x2="71.9" y2="230.6" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="60" cy="238" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="60.0" y="238.0" text-anchor="middle" dominant-baseline="central" font-size="12">10</text>
+<text class="t-accent2 mono" x="78.0" y="226.0" text-anchor="start" dominant-baseline="central" font-size="10">-1</text>
+<circle class="s-ink f-paper" cx="94" cy="280" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="94.0" y="280.0" text-anchor="middle" dominant-baseline="central" font-size="12">20</text>
+<circle class="s-bad f-bad-soft" cx="128" cy="196" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="128.0" y="196.0" text-anchor="middle" dominant-baseline="central" font-size="12">30</text>
+<text class="t-accent2 mono" x="146.0" y="184.0" text-anchor="start" dominant-baseline="central" font-size="10">+2</text>
+<line class="s-ink f-none" x1="178.0" y1="240.0" x2="240.0" y2="240.0" stroke-width="1.6"/>
+<polygon class="s-none f-ink" points="246.0,240.0 237.0,236.4 237.0,243.6"/>
+<text class="t-ink" x="212.0" y="226.0" text-anchor="middle" dominant-baseline="central" font-size="11">left at 10</text>
+<line class="s-ink f-none" x1="295.2" y1="248.9" x2="278.8" y2="269.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="329.2" y1="206.9" x2="312.8" y2="227.1" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="270" cy="280" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="270.0" y="280.0" text-anchor="middle" dominant-baseline="central" font-size="12">10</text>
+<circle class="s-ink f-paper" cx="304" cy="238" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="304.0" y="238.0" text-anchor="middle" dominant-baseline="central" font-size="12">20</text>
+<text class="t-accent2 mono" x="322.0" y="226.0" text-anchor="start" dominant-baseline="central" font-size="10">+1</text>
+<circle class="s-bad f-bad-soft" cx="338" cy="196" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="338.0" y="196.0" text-anchor="middle" dominant-baseline="central" font-size="12">30</text>
+<text class="t-accent2 mono" x="356.0" y="184.0" text-anchor="start" dominant-baseline="central" font-size="10">+2</text>
+<line class="s-ink f-none" x1="388.0" y1="240.0" x2="450.0" y2="240.0" stroke-width="1.6"/>
+<polygon class="s-none f-ink" points="456.0,240.0 447.0,236.4 447.0,243.6"/>
+<text class="t-ink" x="422.0" y="226.0" text-anchor="middle" dominant-baseline="central" font-size="11">right at 30</text>
+<line class="s-ink f-none" x1="515.2" y1="222.9" x2="498.8" y2="243.1" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="532.8" y1="222.9" x2="549.2" y2="243.1" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="490" cy="254" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="490.0" y="254.0" text-anchor="middle" dominant-baseline="central" font-size="12">10</text>
+<circle class="s-good f-good-soft" cx="524" cy="212" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="524.0" y="212.0" text-anchor="middle" dominant-baseline="central" font-size="12">20</text>
+<text class="t-accent2 mono" x="542.0" y="200.0" text-anchor="start" dominant-baseline="central" font-size="10">0</text>
+<circle class="s-ink f-paper" cx="558" cy="254" r="14" stroke-width="1.3"/>
+<text class="t-ink mono" x="558.0" y="254.0" text-anchor="middle" dominant-baseline="central" font-size="12">30</text>
+</svg><figcaption>
+<span class="fignum">Figure 7.2</span> The two ways a node can become left-heavy, and their repairs. Top: the extra height is on the <em>outside</em> (the left child’s left subtree); one right rotation fixes it. Bottom: the extra height is on the <em>inside</em> (the left child’s right subtree); a left rotation at the child first converts it to the outside case, and then a right rotation finishes the job.
+</figcaption></figure>
+<p><strong>The outside case.</strong> The extra height is in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>’s <em>left</em> subtree: the path from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>z</mi><annotation encoding="application/x-tex">z</annotation></semantics></math> goes left, then left. A single right rotation at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>z</mi><annotation encoding="application/x-tex">z</annotation></semantics></math> lifts <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> and its tall left subtree up a level, and lowers <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>z</mi><annotation encoding="application/x-tex">z</annotation></semantics></math>. The subtree is balanced.</p>
+<p><strong>The inside case.</strong> The extra height is in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>’s <em>right</em> subtree: the path goes left, then right, in a zig-zag. A right rotation at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>z</mi><annotation encoding="application/x-tex">z</annotation></semantics></math> alone does not help; it would move the tall inner subtree across to hang under <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>z</mi><annotation encoding="application/x-tex">z</annotation></semantics></math>, leaving things just as lopsided in the other direction. Instead we first rotate <em>left</em> at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>. That straightens the zig-zag into the outside case. Then a right rotation at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>z</mi><annotation encoding="application/x-tex">z</annotation></semantics></math> finishes, as before. Two rotations, often called a <strong>double rotation</strong>.</p>
+<p>A node that is too tall on the <em>right</em> is handled by the mirror images. That makes four cases in all, traditionally named left-left, left-right, right-right, and right-left after the direction of the two steps from the unbalanced node toward the extra height. All four are handled by one short function.</p>
+<div class="listing"><div class="listing-file">code/ch07/avl.hpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Restore the AVL invariant at this node, assuming both of its</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co">// subtrees already satisfy it and their heights differ by at most 2.</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">void</span> rebalance<span class="op">(</span>Link<span class="op">&amp;</span> link<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    update<span class="op">(*</span>link<span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> b <span class="op">=</span> balance<span class="op">(*</span>link<span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>b <span class="op">&gt;</span> <span class="dv">1</span><span class="op">)</span> <span class="op">{</span>                                   <span class="co">// too tall on the left</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>balance<span class="op">(*</span>link<span class="op">-&gt;</span>left<span class="op">)</span> <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>            rotate_left<span class="op">(</span>link<span class="op">-&gt;</span>left<span class="op">);</span>               <span class="co">// left-right: straighten first</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        rotate_right<span class="op">(</span>link<span class="op">);</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>b <span class="op">&lt;</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span> <span class="op">{</span>                           <span class="co">// too tall on the right</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>balance<span class="op">(*</span>link<span class="op">-&gt;</span>right<span class="op">)</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>            rotate_right<span class="op">(</span>link<span class="op">-&gt;</span>right<span class="op">);</span>             <span class="co">// right-left: straighten first</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        rotate_left<span class="op">(</span>link<span class="op">);</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The function reads off the cases directly. If the node is left-heavy by two, look at its left child. If that child leans <em>right</em> (the inside case), rotate the child left first. Then rotate the node right.</p>
+<p>Insertion calls <code>rebalance</code> on each node along the path, on the way back up from the recursion.</p>
+<div class="listing"><div class="listing-file">code/ch07/avl.hpp</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">bool</span> insert<span class="op">(</span>Link<span class="op">&amp;</span> link<span class="op">,</span> K key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>link<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>        link <span class="op">=</span> <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Node<span class="op">&gt;(</span><span class="bu">std::</span>move<span class="op">(</span>key<span class="op">));</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> added<span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>key <span class="op">&lt;</span> link<span class="op">-&gt;</span>key<span class="op">)</span> added <span class="op">=</span> insert<span class="op">(</span>link<span class="op">-&gt;</span>left<span class="op">,</span> <span class="bu">std::</span>move<span class="op">(</span>key<span class="op">));</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>link<span class="op">-&gt;</span>key <span class="op">&lt;</span> key<span class="op">)</span> added <span class="op">=</span> insert<span class="op">(</span>link<span class="op">-&gt;</span>right<span class="op">,</span> <span class="bu">std::</span>move<span class="op">(</span>key<span class="op">));</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>added<span class="op">)</span> rebalance<span class="op">(</span>link<span class="op">);</span>   <span class="co">// on the way back up, fix this node</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> added<span class="op">;</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Compare this with the plain <code>Bst::insert</code> of <a href="06-trees.html#sec:bst">Section 6.3</a>. The descent is identical. The only addition is the call to <code>rebalance</code> after the recursive call returns, which is to say, as the recursion unwinds through the ancestors of the new node from the bottom up. This is a place where recursion earns its keep: “do something at every node on the path back to the root” is exactly what the unwinding call stack does, for free.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 7.2</span></p>
+<p>Insert the keys 10, 20, 30, 40, 50, 25, in that order, into an empty AVL tree. After which insertions is a rotation needed, and which case is each?</p>
+<details class="answer"><summary>Answer</summary>
+<p>Inserting 30 unbalances 10 (right-right): rotate left at 10, giving 20 at the root. Inserting 50 unbalances 30 (right-right): rotate left at 30, so 40 has children 30 and 50. Inserting 25 unbalances the root 20, whose right subtree (rooted at 40) is now two taller than its left, and the extra height is on the <em>inside</em>, under 40’s left child 30. That is the right-left case: rotate right at 40, then left at 20. The final tree has 30 at the root, with children 20 (over 10 and 25) and 40 (over 50). <a href="#fig:avl">Figure 7.3</a> shows the last step.</p>
+</details>
+</aside>
+<figure class="fig viz" id="fig:avl"><div class="viz-widget" data-viz="bst" data-mode="avl"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 210" width="640" height="210" role="img" aria-label="An AVL tree with balance factors after a double rotation." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="214.4" y1="112.4" x2="181.6" y2="147.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="237.6" y1="112.4" x2="270.4" y2="147.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="405.6" y1="112.4" x2="438.4" y2="147.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="323.0" y1="48.0" x2="241.0" y2="92.0" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="349.6" y1="52.4" x2="382.4" y2="87.6" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="170" cy="160" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="170.0" y="160.0" text-anchor="middle" dominant-baseline="central" font-size="13">10</text>
+<text class="t-accent2 mono" x="191.0" y="145.0" text-anchor="start" dominant-baseline="central" font-size="10">0</text>
+<circle class="s-ink f-accent-soft" cx="226" cy="100" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="226.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="13">20</text>
+<text class="t-accent2 mono" x="247.0" y="85.0" text-anchor="start" dominant-baseline="central" font-size="10">0</text>
+<circle class="s-accent2 f-accent2-soft" cx="282" cy="160" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="282.0" y="160.0" text-anchor="middle" dominant-baseline="central" font-size="13">25</text>
+<text class="t-accent2 mono" x="303.0" y="145.0" text-anchor="start" dominant-baseline="central" font-size="10">0</text>
+<circle class="s-ink f-accent-soft" cx="338" cy="40" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="338.0" y="40.0" text-anchor="middle" dominant-baseline="central" font-size="13">30</text>
+<text class="t-accent2 mono" x="359.0" y="25.0" text-anchor="start" dominant-baseline="central" font-size="10">0</text>
+<circle class="s-ink f-accent-soft" cx="394" cy="100" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="394.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="13">40</text>
+<text class="t-accent2 mono" x="415.0" y="85.0" text-anchor="start" dominant-baseline="central" font-size="10">-1</text>
+<circle class="s-ink f-paper" cx="450" cy="160" r="17" stroke-width="1.3"/>
+<text class="t-ink mono" x="450.0" y="160.0" text-anchor="middle" dominant-baseline="central" font-size="13">50</text>
+<text class="t-accent2 mono" x="471.0" y="145.0" text-anchor="start" dominant-baseline="central" font-size="10">0</text>
+<text class="t-accent2" x="500.0" y="60.0" text-anchor="start" dominant-baseline="central" font-size="12">inserted last: 25</text>
+<text class="t-muted" x="500.0" y="84.0" text-anchor="start" dominant-baseline="central" font-size="11">balance factor =</text>
+<text class="t-muted" x="500.0" y="100.0" text-anchor="start" dominant-baseline="central" font-size="11">left height - right height</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 7.3</span> An AVL tree after inserting 10, 20, 30, 40, 50, and then 25. Each node shows its balance factor. The last insertion made the root’s balance factor <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">-2</annotation></semantics></math> with the extra height on the inside, and was repaired by a double rotation. In the web edition, insert and remove keys and watch each rotation; try inserting sorted keys, the input that ruined the plain search tree.
+</figcaption></figure>
+<aside class="callout byhand"><p class="callout-title"><span class="lab">By hand first</span></p>
+<p>Insert the keys 1 through 10, in order, into an empty AVL tree, on paper. Draw the tree after every insertion, write the balance factor beside every node, and name the case for every rotation. Then remove 1, 2, and 3. Use the interactive figure to check each step <em>after</em> you have drawn it.</p>
+<p>Rotations are hard to get right from a verbal description and easy once your hands know them. The four cases will blur together until you have drawn each a few times; after that they are obvious, and you will be able to reconstruct the code from the pictures instead of memorizing it.</p>
+</aside>
+</section>
+<section id="sec:avl-erase" class="level3 unnumbered">
+<h3 class="unnumbered">Removal</h3>
+<p>Removal follows the same pattern. Remove the node as in a plain search tree (the three cases of <a href="06-trees.html#sec:bst-erase">Section 6.4</a>), then walk back up, rebalancing every node on the path.</p>
+<div class="listing"><div class="listing-file">code/ch07/avl.hpp</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Detach and return the smallest node of the subtree `link` owns,</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="co">// rebalancing every node on the path back up.</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> Link extract_min<span class="op">(</span>Link<span class="op">&amp;</span> link<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>link<span class="op">-&gt;</span>left<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        Link smallest <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>link<span class="op">);</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        link <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>smallest<span class="op">-&gt;</span>right<span class="op">);</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> smallest<span class="op">;</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    Link smallest <span class="op">=</span> extract_min<span class="op">(</span>link<span class="op">-&gt;</span>left<span class="op">);</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    rebalance<span class="op">(</span>link<span class="op">);</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> smallest<span class="op">;</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">bool</span> erase<span class="op">(</span>Link<span class="op">&amp;</span> link<span class="op">,</span> <span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>link<span class="op">)</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> removed<span class="op">;</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>key <span class="op">&lt;</span> link<span class="op">-&gt;</span>key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        removed <span class="op">=</span> erase<span class="op">(</span>link<span class="op">-&gt;</span>left<span class="op">,</span> key<span class="op">);</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>link<span class="op">-&gt;</span>key <span class="op">&lt;</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>        removed <span class="op">=</span> erase<span class="op">(</span>link<span class="op">-&gt;</span>right<span class="op">,</span> key<span class="op">);</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>        removed <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!</span>link<span class="op">-&gt;</span>left<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>            link <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>link<span class="op">-&gt;</span>right<span class="op">);</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(!</span>link<span class="op">-&gt;</span>right<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>            link <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>link<span class="op">-&gt;</span>left<span class="op">);</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>            Link successor <span class="op">=</span> extract_min<span class="op">(</span>link<span class="op">-&gt;</span>right<span class="op">);</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>            link<span class="op">-&gt;</span>key <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>successor<span class="op">-&gt;</span>key<span class="op">);</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>removed <span class="op">&amp;&amp;</span> link<span class="op">)</span> rebalance<span class="op">(</span>link<span class="op">);</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> removed<span class="op">;</span></span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>There is one difference from insertion that the code hides. After an insertion, at most one node needs rotating: the repair restores the subtree to its original height, so nothing above it is affected. After a removal, fixing one node can leave its subtree one shorter than before, which may unbalance its parent, and so on up; removal can require a rotation at every level. The code does not care. It calls <code>rebalance</code> at every node on the path regardless, and each call does constant work.</p>
+<p>In the two-child case the successor is detached by <code>extract_min</code>, which rebalances along <em>its</em> path as well, since removing the successor may have unbalanced the nodes above it.</p>
+</section>
+<section id="sec:avl-cost" class="level3 unnumbered">
+<h3 class="unnumbered">What it costs, and how you know</h3>
+<p>Every operation walks one root-to-leaf path and back, doing constant work per node, and the height is at most <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1.45</mn><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">1.45 \log_2 n</annotation></semantics></math>.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Plain BST</th>
+<th style="text-align: left;">AVL tree</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">search, insert, remove</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(h)</annotation></semantics></math>; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> worst case</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math> worst case</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">minimum, lower bound</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(h)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">in-order traversal</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+</tbody>
+</table>
+<p>Here is what the height looks like in practice, for keys inserted in sorted order (the input that drove the plain tree to height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>) and in random order, along with the average number of rotations per insertion.</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math></th>
+<th style="text-align: right;">sorted: height</th>
+<th style="text-align: right;">sorted: rotations per insert</th>
+<th style="text-align: right;">random: height</th>
+<th style="text-align: right;">random: rotations per insert</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1,000</td>
+<td style="text-align: right;">10.0</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">0.99</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">0.70</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">13.3</td>
+<td style="text-align: right;">14</td>
+<td style="text-align: right;">1.00</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">0.67</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">100,000</td>
+<td style="text-align: right;">16.6</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: right;">1.00</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">0.70</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">1,000,000</td>
+<td style="text-align: right;">19.9</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">1.00</td>
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">0.70</td>
+</tr>
+</tbody>
+</table>
+<p>On sorted input the AVL tree is essentially perfectly balanced. On random input it is within a few levels of perfect. Compare the random-order height of 24 for a million keys with the 53 that the plain tree managed. And the balancing is cheap: on average less than one rotation per insertion.</p>
+<p>Now the fourth question, which for balanced trees has a twist. The test for this chapter runs a differential test against <code>std::set</code>, as usual. But suppose we made a mistake in <code>rebalance</code>, or forgot to call it at all. The tree would still be a valid binary search tree. Every search would still return the right answer. <strong>A differential test, which checks only answers, would pass.</strong> The tree would simply be slow on certain inputs, and nothing would say so.</p>
+<p>A balanced tree makes a promise about <em>cost</em>, and a promise about cost is invisible to a test of <em>results</em>. To check it we must look inside.</p>
+<div class="listing"><div class="listing-file">code/ch07/avl.hpp</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Returns the height of n&#39;s subtree, or -1 if any invariant fails:</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co">// search-tree order, stored heights, or the balance condition.</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">int</span> check<span class="op">(</span><span class="at">const</span> Node<span class="op">*</span> n<span class="op">,</span> <span class="at">const</span> K<span class="op">*</span> lo<span class="op">,</span> <span class="at">const</span> K<span class="op">*</span> hi<span class="op">,</span> <span class="bu">std::</span>size_t<span class="op">&amp;</span> count<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n <span class="op">==</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>lo <span class="op">&amp;&amp;</span> <span class="op">!(*</span>lo <span class="op">&lt;</span> n<span class="op">-&gt;</span>key<span class="op">))</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>hi <span class="op">&amp;&amp;</span> <span class="op">!(</span>n<span class="op">-&gt;</span>key <span class="op">&lt;</span> <span class="op">*</span>hi<span class="op">))</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> l <span class="op">=</span> check<span class="op">(</span>n<span class="op">-&gt;</span>left<span class="op">.</span>get<span class="op">(),</span> lo<span class="op">,</span> <span class="op">&amp;</span>n<span class="op">-&gt;</span>key<span class="op">,</span> count<span class="op">);</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> r <span class="op">=</span> check<span class="op">(</span>n<span class="op">-&gt;</span>right<span class="op">.</span>get<span class="op">(),</span> <span class="op">&amp;</span>n<span class="op">-&gt;</span>key<span class="op">,</span> hi<span class="op">,</span> count<span class="op">);</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>l <span class="op">&lt;</span> <span class="dv">0</span> <span class="op">||</span> r <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>l <span class="op">-</span> r <span class="op">&gt;</span> <span class="dv">1</span> <span class="op">||</span> r <span class="op">-</span> l <span class="op">&gt;</span> <span class="dv">1</span><span class="op">)</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span>        <span class="co">// out of balance</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>n<span class="op">-&gt;</span>height <span class="op">!=</span> <span class="dv">1</span> <span class="op">+</span> <span class="bu">std::</span>max<span class="op">(</span>l<span class="op">,</span> r<span class="op">))</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span>   <span class="co">// stale height</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span>count<span class="op">;</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> n<span class="op">-&gt;</span>height<span class="op">;</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>This one recursive function verifies three things at every node: that the keys are in search-tree order (using the bounds technique of <a href="06-trees.html#sec:shape">Section 6.5</a>); that the stored height is correct; and that the two subtree heights differ by at most one. The test calls it after <em>every</em> operation. It also builds a tree from 100,000 sorted keys and asserts that its height is 17.</p>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>Whenever a data structure’s value lies in a performance guarantee, test the property that delivers the guarantee, not just the outputs. For a balanced tree that means checking balance. For a hash table it means looking at chain lengths, as we did in <a href="05-hashing.html">Chapter 5</a>. This matters doubly for code you did not write. A balanced tree with broken rebalancing, whether it came from a colleague, a library, or a model, passes every functional test you can devise, and then falls over in production on the first large sorted input.</p>
+</aside>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Models are good at producing test inputs with a specified property, and the AVL cases make a nice exercise in checking them.</p>
+<blockquote>
+<p>Give me a sequence of exactly seven distinct integer keys which, inserted in order into an empty AVL tree, causes exactly one double rotation and no single rotations. Don’t explain where the rotation happens.</p>
+</blockquote>
+<p>Insert the sequence in the interactive figure, or in your own implementation with the rotation counter, and see whether it does what was claimed. Requests with words like “exactly one” are precisely where a model’s answer needs checking: the sequence it gives will look plausible whether or not it is right.</p>
+</aside>
+</section>
+</section>
+<section id="sec:family" class="level2">
+<h2><span class="secnum">7.3</span> The family of balanced trees</h2>
+<p>AVL trees are one answer to the shape problem. There are several others, all offering the same <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math> operations through different invariants. You should know that they exist and what distinguishes them. You will rarely need to implement one.</p>
+<p><strong>Red-black trees</strong> color each node red or black and constrain the coloring: a red node has no red child, and every path from the root down to an empty subtree passes through the same number of black nodes <span class="citation" data-cites="guibas1978">(<a href="#ref-guibas1978" role="doc-biblioref">Guibas and Sedgewick 1978</a>)</span>. Together those rules guarantee that no path is more than twice as long as any other, so the height is at most <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><msub><mo>log</mo><mn>2</mn></msub><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">2 \log_2 (n+1)</annotation></semantics></math>. That is a looser bound than the AVL tree’s, so searches can be slightly slower. In exchange, updates do less restructuring: an insertion needs at most two rotations and a removal at most three, with the rest of the repair done by recoloring. The red-black tree is the structure inside <code>std::map</code> and <code>std::set</code> in all the major C++ standard libraries, and inside Java’s <code>TreeMap</code>. Its insertion algorithm is manageable; its removal algorithm is famously intricate.</p>
+<p><strong>Treaps</strong> and <strong>skip lists</strong> get balance from randomness instead of from rules. A treap gives every node a random priority and keeps the tree in heap order (<a href="08-heaps-sorting.html">Chapter 8</a>) by priority, which makes it shaped like a search tree built in random order, whatever the actual order of insertion <span class="citation" data-cites="seidel1996">(<a href="#ref-seidel1996" role="doc-biblioref">Seidel and Aragon 1996</a>)</span>. A skip list is not a tree at all but a stack of linked lists, each skipping over more elements than the one below, with each element’s height chosen by coin flips <span class="citation" data-cites="pugh1990">(<a href="#ref-pugh1990" role="doc-biblioref">Pugh 1990</a>)</span>. Both are much simpler to implement than red-black trees and are logarithmic <em>in expectation</em>.</p>
+<p><strong>Splay trees</strong> keep no balance information whatever. Each time a key is accessed, it is rotated all the way to the root. Any single operation may be slow, but every sequence of operations is fast on average, an amortized <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math> bound, and recently used keys are found especially quickly <span class="citation" data-cites="sleator1985">(<a href="#ref-sleator1985" role="doc-biblioref">Sleator and Tarjan 1985</a>)</span>.</p>
+<p>All of these are binary, and they all share a weakness that has nothing to do with their height.</p>
+</section>
+<section id="sec:btree" class="level2">
+<h2><span class="secnum">7.4</span> B-trees</h2>
+<p>A balanced binary tree with a million keys is about twenty levels deep. A search visits twenty nodes. Each node is a separate heap allocation, somewhere in memory. You know from <a href="04-links.html#sec:cache">Section 4.5</a> what that means: twenty pointers chased, and for a large tree, close to twenty cache misses. The comparisons are few. The memory accesses are what hurt.</p>
+<p>The step count cannot be improved: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math> comparisons are necessary to find one key among <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> by comparing. But nothing says each comparison has to be a separate trip to memory.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 7.3</span></p>
+<p>Suppose each node of a search tree held not one key but fifteen, in sorted order, with sixteen children: one for each gap between keys, plus the two ends. How many levels would a tree of a million keys need? How would you search within a node?</p>
+<details class="answer"><summary>Answer</summary>
+<p>Each level multiplies the number of reachable keys by sixteen, so the height is about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>16</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_{16} n</annotation></semantics></math>: five levels for a million keys, in place of twenty. Within a node, the keys are a small sorted array, so use binary search (or, for an array this small, even a linear scan). Those comparisons all touch one contiguous block, one or two cache lines, and so cost very little.</p>
+</details>
+</aside>
+<p>That is the <strong>B-tree</strong> <span class="citation" data-cites="bayer1972">(<a href="#ref-bayer1972" role="doc-biblioref">Bayer and McCreight 1972</a>)</span>. It is a search tree with fat nodes.</p>
+<ul>
+<li>Every node holds up to some maximum number of keys, kept in sorted order in an array inside the node.</li>
+<li>A node with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> keys that is not a leaf has <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">k + 1</annotation></semantics></math> children. The keys act as dividers: the first child holds everything less than the first key, the second child everything between the first and second keys, and so on.</li>
+<li><strong>All leaves are at the same depth.</strong> A B-tree is always perfectly balanced in height.</li>
+</ul>
+<figure class="fig viz" id="fig:btree"><div class="viz-widget" data-viz="btree"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 190" width="640" height="190" role="img" aria-label="A two-level B-tree: a root with two keys and three leaf children." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-accent-soft" x="280.0" y="36" width="40" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="300.0" y="51.0" text-anchor="middle" dominant-baseline="central" font-size="13">30</text>
+<rect class="s-ink f-accent-soft" x="320.0" y="36" width="40" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="340.0" y="51.0" text-anchor="middle" dominant-baseline="central" font-size="13">60</text>
+<rect class="s-ink f-paper" x="90.0" y="124" width="40" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="110.0" y="139.0" text-anchor="middle" dominant-baseline="central" font-size="13">10</text>
+<rect class="s-ink f-paper" x="130.0" y="124" width="40" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="150.0" y="139.0" text-anchor="middle" dominant-baseline="central" font-size="13">20</text>
+<line class="s-ink f-none" x1="280.0" y1="66.0" x2="135.6" y2="119.9" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="130.0,122.0 139.7,122.2 137.2,115.5"/>
+<rect class="s-ink f-paper" x="280.0" y="124" width="40" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="300.0" y="139.0" text-anchor="middle" dominant-baseline="central" font-size="13">40</text>
+<rect class="s-ink f-paper" x="320.0" y="124" width="40" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="340.0" y="139.0" text-anchor="middle" dominant-baseline="central" font-size="13">50</text>
+<line class="s-ink f-none" x1="320.0" y1="66.0" x2="320.0" y2="116.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="320.0,122.0 323.6,113.0 316.4,113.0"/>
+<rect class="s-ink f-paper" x="460.0" y="124" width="40" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="480.0" y="139.0" text-anchor="middle" dominant-baseline="central" font-size="13">70</text>
+<rect class="s-ink f-paper" x="500.0" y="124" width="40" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="520.0" y="139.0" text-anchor="middle" dominant-baseline="central" font-size="13">80</text>
+<rect class="s-ink f-paper" x="540.0" y="124" width="40" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="560.0" y="139.0" text-anchor="middle" dominant-baseline="central" font-size="13">90</text>
+<line class="s-ink f-none" x1="360.0" y1="66.0" x2="514.3" y2="120.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="520.0,122.0 512.7,115.6 510.3,122.4"/>
+<text class="t-muted" x="130.0" y="172.0" text-anchor="middle" dominant-baseline="central" font-size="11">keys &lt; 30</text>
+<text class="t-muted" x="320.0" y="172.0" text-anchor="middle" dominant-baseline="central" font-size="11">30 &lt; keys &lt; 60</text>
+<text class="t-muted" x="520.0" y="172.0" text-anchor="middle" dominant-baseline="central" font-size="11">keys &gt; 60</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 7.4</span> A B-tree in which each node holds at most three keys. The keys in a node divide the key space; each child holds the keys that fall in one gap. All leaves are at the same depth. In the web edition, insert keys and watch full nodes split and the tree grow at the root.
+</figcaption></figure>
+<div class="listing"><div class="listing-file">code/ch07/btree.hpp</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t n <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>                                   <span class="co">// keys in use</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>array<span class="op">&lt;</span>K<span class="op">,</span> MAX <span class="op">+</span> <span class="dv">1</span><span class="op">&gt;</span> keys<span class="op">;</span>                         <span class="co">// sorted; 1 spare slot</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>array<span class="op">&lt;</span><span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Node<span class="op">&gt;,</span> MAX <span class="op">+</span> <span class="dv">2</span><span class="op">&gt;</span> kids<span class="op">;</span>     <span class="co">// n + 1 children, or none</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> leaf<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="op">!</span>kids<span class="op">[</span><span class="dv">0</span><span class="op">];</span> <span class="op">}</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<p>Searching descends from the root. At each node, search within the node’s array for the key; if it is there, done; if not, the search has found the gap where the key would be, and descends into the corresponding child.</p>
+<div class="listing"><div class="listing-file">code/ch07/btree.hpp</div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> contains<span class="op">(</span><span class="at">const</span> K<span class="op">&amp;</span> key<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Node<span class="op">*</span> node <span class="op">=</span> <span class="va">root_</span><span class="op">.</span>get<span class="op">();</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>node <span class="op">!=</span> <span class="kw">nullptr</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>size_t i <span class="op">=</span> position<span class="op">(*</span>node<span class="op">,</span> key<span class="op">);</span>             <span class="co">// search within the node</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> node<span class="op">-&gt;</span>n <span class="op">&amp;&amp;</span> <span class="op">!(</span>key <span class="op">&lt;</span> node<span class="op">-&gt;</span>keys<span class="op">[</span>i<span class="op">]))</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        node <span class="op">=</span> node<span class="op">-&gt;</span>kids<span class="op">[</span>i<span class="op">].</span>get<span class="op">();</span>                       <span class="co">// descend between keys</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The same total number of comparisons is performed as in a binary tree, about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math>. The difference is that they are grouped: four or five comparisons within one node, all in the same small block of memory, before moving to the next node. A B-tree is a tree of sorted arrays, and it gets the best of both structures: a tree’s cheap updates, and an array’s locality.</p>
+<section id="sec:btree-insert" class="level3 unnumbered">
+<h3 class="unnumbered">Insertion: growing from the top</h3>
+<p>How does a B-tree stay perfectly balanced? The answer is one of the most elegant ideas in data structures, and it reverses your expectation of how trees grow.</p>
+<p>New keys are always inserted into a leaf, in sorted position within the leaf’s array. If the leaf has room, that is all. If the leaf is now overfull, it <strong>splits</strong>: its lower half stays, its upper half moves to a new sibling node, and its <em>middle key moves up</em> into the parent, to serve as the divider between the two halves.</p>
+<figure class="fig" id="fig:btree-split"><svg class="figsvg" viewBox="0 0 640 200" width="640" height="200" role="img" aria-label="A leaf with four keys splits; its middle key moves up into the parent." xmlns="http://www.w3.org/2000/svg">
+<text class="t-ink b" x="150.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="12">after inserting 95: overfull</text>
+<rect class="s-ink f-accent-soft" x="112.0" y="40" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="126.0" y="55.0" text-anchor="middle" dominant-baseline="central" font-size="13">30</text>
+<rect class="s-ink f-accent-soft" x="140.0" y="40" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="154.0" y="55.0" text-anchor="middle" dominant-baseline="central" font-size="13">60</text>
+<rect class="s-ink f-paper" x="17.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="31.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">10</text>
+<rect class="s-ink f-paper" x="45.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="59.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">20</text>
+<line class="s-ink f-none" x1="112.0" y1="70.0" x2="49.9" y2="114.5" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="45.0,118.0 54.4,115.7 50.2,109.8"/>
+<rect class="s-ink f-paper" x="92.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="106.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">40</text>
+<rect class="s-ink f-paper" x="120.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="134.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">50</text>
+<line class="s-ink f-none" x1="140.0" y1="70.0" x2="122.3" y2="112.5" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="120.0,118.0 126.8,111.1 120.1,108.3"/>
+<rect class="s-bad f-bad-soft" x="169.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="183.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">70</text>
+<rect class="s-bad f-bad-soft" x="197.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="211.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">80</text>
+<rect class="s-bad f-bad-soft" x="225.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="239.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">90</text>
+<rect class="s-bad f-bad-soft" x="253.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="267.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">95</text>
+<line class="s-ink f-none" x1="168.0" y1="70.0" x2="220.4" y2="114.1" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="225.0,118.0 220.4,109.4 215.8,115.0"/>
+<text class="t-bad" x="239.0" y="166.0" text-anchor="middle" dominant-baseline="central" font-size="10">middle key</text>
+<line class="s-ink f-none" x1="298.0" y1="96.0" x2="324.0" y2="96.0" stroke-width="1.8"/>
+<polygon class="s-none f-ink" points="330.0,96.0 321.0,92.4 321.0,99.6"/>
+<text class="t-ink b" x="480.0" y="16.0" text-anchor="middle" dominant-baseline="central" font-size="12">after the split</text>
+<rect class="s-ink f-accent-soft" x="438.0" y="40" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="452.0" y="55.0" text-anchor="middle" dominant-baseline="central" font-size="13">30</text>
+<rect class="s-ink f-accent-soft" x="466.0" y="40" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="480.0" y="55.0" text-anchor="middle" dominant-baseline="central" font-size="13">60</text>
+<rect class="s-ink f-accent-soft" x="494.0" y="40" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="508.0" y="55.0" text-anchor="middle" dominant-baseline="central" font-size="13">90</text>
+<rect class="s-accent2 f-accent2-soft" x="494.0" y="40" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="508.0" y="55.0" text-anchor="middle" dominant-baseline="central" font-size="13">90</text>
+<rect class="s-ink f-paper" x="342.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="356.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">10</text>
+<rect class="s-ink f-paper" x="370.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="384.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">20</text>
+<line class="s-ink f-none" x1="438.0" y1="70.0" x2="374.9" y2="114.5" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="370.0,118.0 379.4,115.8 375.3,109.9"/>
+<rect class="s-ink f-paper" x="417.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="431.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">40</text>
+<rect class="s-ink f-paper" x="445.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="459.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">50</text>
+<line class="s-ink f-none" x1="466.0" y1="70.0" x2="447.4" y2="112.5" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="445.0,118.0 451.9,111.2 445.3,108.3"/>
+<rect class="s-ink f-good-soft" x="492.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="506.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">70</text>
+<rect class="s-ink f-good-soft" x="520.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="534.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">80</text>
+<line class="s-ink f-none" x1="494.0" y1="70.0" x2="517.1" y2="112.7" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="520.0,118.0 518.9,108.4 512.5,111.8"/>
+<rect class="s-ink f-good-soft" x="578.0" y="120" width="28" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="592.0" y="135.0" text-anchor="middle" dominant-baseline="central" font-size="13">95</text>
+<line class="s-ink f-none" x1="522.0" y1="70.0" x2="587.1" y2="114.6" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="592.0,118.0 586.6,109.9 582.5,115.9"/>
+<text class="t-good" x="556.0" y="166.0" text-anchor="middle" dominant-baseline="central" font-size="10">two half-full leaves</text>
+</svg><figcaption>
+<span class="fignum">Figure 7.5</span> Splitting an overfull leaf. Inserting 95 gives the rightmost leaf four keys, one more than allowed. The node splits around its middle key, 90, which moves up into the parent as the divider between the two new leaves.
+</figcaption></figure>
+<p>The parent has gained a key. If <em>it</em> is now overfull, it splits in the same way, pushing a key up to its own parent. The splitting can propagate all the way to the root. When the root itself splits, a new root is created above it, holding the single key that was pushed up.</p>
+<div class="listing"><div class="listing-file">code/ch07/btree.hpp</div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Child i of parent is overfull. Split it in two around its middle</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="co">// key, and move that middle key up into parent.</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="at">static</span> <span class="dt">void</span> split_child<span class="op">(</span>Node<span class="op">&amp;</span> parent<span class="op">,</span> <span class="bu">std::</span>size_t i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">&amp;</span> left <span class="op">=</span> <span class="op">*</span>parent<span class="op">.</span>kids<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> right <span class="op">=</span> <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Node<span class="op">&gt;();</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t mid <span class="op">=</span> left<span class="op">.</span>n <span class="op">/</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t j <span class="op">=</span> mid <span class="op">+</span> <span class="dv">1</span><span class="op">;</span> j <span class="op">&lt;</span> left<span class="op">.</span>n<span class="op">;</span> <span class="op">++</span>j<span class="op">)</span> <span class="op">{</span>          <span class="co">// upper keys</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>        right<span class="op">-&gt;</span>keys<span class="op">[</span>right<span class="op">-&gt;</span>n<span class="op">++]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>left<span class="op">.</span>keys<span class="op">[</span>j<span class="op">]);</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>left<span class="op">.</span>leaf<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t j <span class="op">=</span> mid <span class="op">+</span> <span class="dv">1</span><span class="op">;</span> j <span class="op">&lt;=</span> left<span class="op">.</span>n<span class="op">;</span> <span class="op">++</span>j<span class="op">)</span> <span class="op">{</span>     <span class="co">// and their children</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>            right<span class="op">-&gt;</span>kids<span class="op">[</span>j <span class="op">-</span> mid <span class="op">-</span> <span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>left<span class="op">.</span>kids<span class="op">[</span>j<span class="op">]);</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t j <span class="op">=</span> parent<span class="op">.</span>n<span class="op">;</span> j <span class="op">&gt;</span> i<span class="op">;</span> <span class="op">--</span>j<span class="op">)</span> <span class="op">{</span>              <span class="co">// make room above</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>        parent<span class="op">.</span>keys<span class="op">[</span>j<span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>parent<span class="op">.</span>keys<span class="op">[</span>j <span class="op">-</span> <span class="dv">1</span><span class="op">]);</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>        parent<span class="op">.</span>kids<span class="op">[</span>j <span class="op">+</span> <span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>parent<span class="op">.</span>kids<span class="op">[</span>j<span class="op">]);</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>    parent<span class="op">.</span>keys<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>left<span class="op">.</span>keys<span class="op">[</span>mid<span class="op">]);</span>               <span class="co">// middle key rises</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>    parent<span class="op">.</span>kids<span class="op">[</span>i <span class="op">+</span> <span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>right<span class="op">);</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span>parent<span class="op">.</span>n<span class="op">;</span></span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>    left<span class="op">.</span>n <span class="op">=</span> mid<span class="op">;</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch07/btree.hpp</div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> insert<span class="op">(</span>K key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span><span class="va">root_</span><span class="op">)</span> <span class="va">root_</span> <span class="op">=</span> <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Node<span class="op">&gt;();</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">bool</span> added <span class="op">=</span> insert<span class="op">(*</span><span class="va">root_</span><span class="op">,</span> <span class="bu">std::</span>move<span class="op">(</span>key<span class="op">));</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="va">root_</span><span class="op">-&gt;</span>n <span class="op">&gt;</span> MAX<span class="op">)</span> <span class="op">{</span>                  <span class="co">// the root itself overflowed:</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> top <span class="op">=</span> <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Node<span class="op">&gt;();</span>   <span class="co">// grow a new root above it</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        top<span class="op">-&gt;</span>kids<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span><span class="va">root_</span><span class="op">);</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>        split_child<span class="op">(*</span>top<span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">root_</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>top<span class="op">);</span>            <span class="co">// the tree is one level taller</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>added<span class="op">)</span> <span class="op">++</span><span class="va">size_</span><span class="op">;</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> added<span class="op">;</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>That last step is the only way a B-tree ever gets taller, and it adds one level to <em>every</em> path at once. A binary search tree grows downward at its leaves, unevenly, which is where its balance problem comes from. A B-tree grows upward at its root, so all leaves stay at the same depth automatically. No rotations, no balance factors, no colors.</p>
+<p>(The B-tree in this chapter’s code supports insertion and search. Removal uses the reverse operations, borrowing a key from a sibling or merging two nodes, and is left for the exercises to describe.)</p>
+</section>
+<section id="sec:btree-measure" class="level3 unnumbered">
+<h3 class="unnumbered">Measurements</h3>
+<p>Here are times in nanoseconds per operation for random integer keys, for the standard library’s red-black tree (<code>std::set</code>, abbreviated <code>set</code> in the table), this chapter’s AVL tree, and this chapter’s B-tree with up to 31 keys per node. A sorted vector with binary search is included for lookups, as the contiguous baseline.</p>
+<table>
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;">insert: <code>set</code></th>
+<th style="text-align: right;">insert: AVL</th>
+<th style="text-align: right;">insert: B-tree</th>
+<th style="text-align: right;">find: vector</th>
+<th style="text-align: right;">find: <code>set</code></th>
+<th style="text-align: right;">find: AVL</th>
+<th style="text-align: right;">find: B-tree</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">59</td>
+<td style="text-align: right;">92</td>
+<td style="text-align: right;">60</td>
+<td style="text-align: right;">47</td>
+<td style="text-align: right;">60</td>
+<td style="text-align: right;">54</td>
+<td style="text-align: right;">58</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">100,000</td>
+<td style="text-align: right;">91</td>
+<td style="text-align: right;">156</td>
+<td style="text-align: right;">82</td>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">147</td>
+<td style="text-align: right;">121</td>
+<td style="text-align: right;">89</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">1,000,000</td>
+<td style="text-align: right;">232</td>
+<td style="text-align: right;">386</td>
+<td style="text-align: right;">121</td>
+<td style="text-align: right;">103</td>
+<td style="text-align: right;">473</td>
+<td style="text-align: right;">329</td>
+<td style="text-align: right;">138</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10,000,000</td>
+<td style="text-align: right;">849</td>
+<td style="text-align: right;">1,023</td>
+<td style="text-align: right;">250</td>
+<td style="text-align: right;">190</td>
+<td style="text-align: right;">1,050</td>
+<td style="text-align: right;">821</td>
+<td style="text-align: right;">305</td>
+</tr>
+</tbody>
+</table>
+<p>While everything fits in the cache, the structures are within a factor of two of one another. Once the data outgrows it, all of them slow down, but the two binary trees slow by a factor of eleven to eighteen and the B-tree by about five: at ten million keys it finds a key more than three times as fast as <code>std::set</code>, and inserts more than three times as fast too. The AVL tree, being more tightly balanced than the red-black tree, is a little faster to search and a little slower to update, as the theory predicts. The B-tree is within a factor of two of the sorted vector for lookups, while supporting fast insertion, which the vector does not.</p>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>B-trees were invented at Boeing in 1970 for data on disk, where the gap between “in the same block” and “in a different block” is not a factor of a hundred, as with the cache, but a factor of a hundred thousand or more <span class="citation" data-cites="bayer1972 comer1979">(<a href="#ref-bayer1972" role="doc-biblioref">Bayer and McCreight 1972</a>; <a href="#ref-comer1979" role="doc-biblioref">Comer 1979</a>)</span>. With nodes the size of a disk page, each holding hundreds of keys, a B-tree four levels deep can index billions of records, and any one of them can be found with three or four disk reads. Essentially every relational database and most file systems are built on B-trees or their close variant the B+ tree, which <a href="10-wild.html">Chapter 10</a> describes.</p>
+<p>The same idea is now used in memory, for the cache-related reasons measured above. Rust’s standard ordered map, <code>BTreeMap</code>, is a B-tree; so is Google’s <code>btree_map</code> in the Abseil library for C++. When a modern system needs an ordered map and cares about speed, it is increasingly likely to be a B-tree and not a binary tree.</p>
+</aside>
+</section>
+</section>
+<section id="sec:ordered-maps" class="level2">
+<h2><span class="secnum">7.5</span> Ordered maps in practice</h2>
+<p>In your own programs you will use the standard library’s balanced trees: <code>std::map&lt;K, V&gt;</code> and <code>std::set&lt;K&gt;</code>. Their interface is nearly the same as that of <code>unordered_map</code> and <code>unordered_set</code>, with the addition of everything that depends on order.</p>
+<div class="listing"><div class="listing-file">code/ch07/avl_test.cpp</div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>map<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">,</span> <span class="dt">int</span><span class="op">&gt;</span> born<span class="op">{{</span><span class="st">&quot;Hopper&quot;</span><span class="op">,</span> <span class="dv">1906</span><span class="op">},</span> <span class="op">{</span><span class="st">&quot;Lovelace&quot;</span><span class="op">,</span> <span class="dv">1815</span><span class="op">},</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>                                <span class="op">{</span><span class="st">&quot;Turing&quot;</span><span class="op">,</span> <span class="dv">1912</span><span class="op">},</span> <span class="op">{</span><span class="st">&quot;Knuth&quot;</span><span class="op">,</span> <span class="dv">1938</span><span class="op">}};</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Iteration is in key order, always.</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>string names<span class="op">;</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="at">const</span> <span class="kw">auto</span><span class="op">&amp;</span> <span class="op">[</span>name<span class="op">,</span> year<span class="op">]</span> <span class="op">:</span> born<span class="op">)</span> names <span class="op">+=</span> name <span class="op">+</span> <span class="ch">&#39; &#39;</span><span class="op">;</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>names <span class="op">==</span> <span class="st">&quot;Hopper Knuth Lovelace Turing &quot;</span><span class="op">);</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Smallest and largest keys.</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>born<span class="op">.</span>begin<span class="op">()-&gt;</span>first <span class="op">==</span> <span class="st">&quot;Hopper&quot;</span><span class="op">);</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>born<span class="op">.</span>rbegin<span class="op">()-&gt;</span>first <span class="op">==</span> <span class="st">&quot;Turing&quot;</span><span class="op">);</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="co">// First key that is not less than &quot;L&quot;.</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> it <span class="op">=</span> born<span class="op">.</span>lower_bound<span class="op">(</span><span class="st">&quot;L&quot;</span><span class="op">);</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>it<span class="op">-&gt;</span>first <span class="op">==</span> <span class="st">&quot;Lovelace&quot;</span><span class="op">);</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a><span class="co">// Every key in the half-open range [&quot;H&quot;, &quot;L&quot;).</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> count <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span> p <span class="op">=</span> born<span class="op">.</span>lower_bound<span class="op">(</span><span class="st">&quot;H&quot;</span><span class="op">);</span> p <span class="op">!=</span> born<span class="op">.</span>lower_bound<span class="op">(</span><span class="st">&quot;L&quot;</span><span class="op">);</span> <span class="op">++</span>p<span class="op">)</span> <span class="op">++</span>count<span class="op">;</span></span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>count <span class="op">==</span> <span class="dv">2</span><span class="op">);</span>   <span class="co">// Hopper, Knuth</span></span></code></pre></div>
+</div>
+<p>The loop <code>for (const auto&amp; [name, year] : born)</code> visits the entries in increasing order of key; the square brackets unpack each key–value pair into two named variables. <code>begin()</code> is the smallest entry. <code>lower_bound(k)</code> returns an iterator to the first entry whose key is not less than <code>k</code>, and from an iterator you can step forward or backward through the keys in order. A range query is a walk from one <code>lower_bound</code> to another.</p>
+<p>By default the keys are ordered with <code>&lt;</code>. To order them differently, or to use a key type that has no <code>&lt;</code>, you supply a comparison function.</p>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>A comparison given to <code>std::map</code>, <code>std::set</code>, or <code>std::sort</code> must behave like “less than”: it must return false when comparing a value with itself, and if it says <code>a</code> is before <code>b</code> it must not also say <code>b</code> is before <code>a</code>. A comparison written with <code>&lt;=</code> breaks the first rule. The container uses “neither is less than the other” as its test for equality, as our own <code>contains</code> does, so with <code>&lt;=</code> no key is ever equal to itself, and the tree’s behavior is undefined. Always use a strict comparison.</p>
+</aside>
+<p>Which associative container should you use? Here are the three candidates side by side.</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;"></th>
+<th style="text-align: left;">Hash table</th>
+<th style="text-align: left;">Balanced tree</th>
+<th style="text-align: left;">Sorted vector</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Standard type</td>
+<td style="text-align: left;"><code>unordered_map</code></td>
+<td style="text-align: left;"><code>map</code></td>
+<td style="text-align: left;"><code>vector</code> + <code>lower_bound</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Find</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> expected</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Insert, remove</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> expected</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Worst case</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+<td style="text-align: left;">as above</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Smallest, largest, next, range</td>
+<td style="text-align: left;">no</td>
+<td style="text-align: left;">yes</td>
+<td style="text-align: left;">yes</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Iteration order</td>
+<td style="text-align: left;">arbitrary</td>
+<td style="text-align: left;">sorted</td>
+<td style="text-align: left;">sorted</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Needs from the key type</td>
+<td style="text-align: left;">hash and <code>==</code></td>
+<td style="text-align: left;"><code>&lt;</code></td>
+<td style="text-align: left;"><code>&lt;</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Memory per entry</td>
+<td style="text-align: left;">moderate</td>
+<td style="text-align: left;">high (three pointers)</td>
+<td style="text-align: left;">minimal</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Cache behavior</td>
+<td style="text-align: left;">fair</td>
+<td style="text-align: left;">poor</td>
+<td style="text-align: left;">excellent</td>
+</tr>
+</tbody>
+</table>
+<p>A reasonable policy follows from the table.</p>
+<ul>
+<li>If you only need to look things up by key, use a <strong>hash table</strong>. It is the fastest.</li>
+<li>If you need the keys in order, or the nearest key, or a range, or a guaranteed worst case, use a <strong>balanced tree</strong>.</li>
+<li>If the data is built once and then only queried, sort a <strong>vector</strong> and use binary search. It is smaller and faster than either. (C++23 packages this arrangement as <code>std::flat_map</code>.)</li>
+</ul>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">AVL tree</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+As a binary search tree: one heap node per key, each owning its children. Each node also stores the height of its subtree.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+The search-tree invariant, and in addition: at every node, the two subtrees differ in height by at most one. Hence the height is less than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1.45</mn><msub><mo>log</mo><mn>2</mn></msub><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>2</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">1.45 \log_2(n+2)</annotation></semantics></math>.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Search, insert, remove, minimum, lower bound: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math> in the worst case, with no assumptions about the input. Less than one rotation per insertion on average. Each step is a pointer chase, so for large trees the constant is dominated by cache misses.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+Differential testing checks the answers but <em>cannot</em> detect broken balancing. Check the balance condition and the stored heights at every node after every operation, and assert the height of a tree built from sorted keys.
+</dd>
+</dl>
+</aside>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">B-tree</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+Nodes that each hold many keys in a sorted, contiguous array, plus one more child pointer than keys. Few, large nodes in place of many small ones.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+Keys in each node are sorted and divide the key ranges of the children. No node holds more than the maximum number of keys. All leaves are at the same depth.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Search and insert: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math> comparisons, but only about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mi>B</mi></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_B n</annotation></semantics></math> nodes visited, where <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>B</mi><annotation encoding="application/x-tex">B</annotation></semantics></math> is the number of children per node. Far fewer cache misses, or disk reads, than a binary tree.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+Differential testing against <code>std::set</code> with a tiny node size, so that splits happen constantly; an invariant check for sortedness, node capacity, and equal leaf depth.
+</dd>
+</dl>
+</aside>
+</section>
+<section id="sec:balance-ex" class="level2 unnumbered">
+<h2 class="unnumbered">Exercises</h2>
+<ol type="1">
+<li><p>Draw the result of a left rotation at the root of the tree with pre-order 20, 10, 40, 30, 50. Then draw the result of a right rotation at the root of <em>that</em> tree. Confirm that the in-order sequence is unchanged throughout.</p></li>
+<li><p>For each of the following, draw the tree and say whether it is a valid AVL tree. If not, name the lowest node at which the invariant fails. (Each is given in pre-order.) (a) 30, 20, 10. (b) 30, 10, 20, 40, 50. (c) 50, 30, 20, 10, 40, 70.</p></li>
+<li><p>Insert the keys 50, 40, 30, 60, 70, 65, 45, 47 into an empty AVL tree. Draw the tree after each insertion, and name each rotation case.</p></li>
+<li><p>Using the recurrence for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>h</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">N(h)</annotation></semantics></math>, extend the table to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi><mo>=</mo><mn>15</mn></mrow><annotation encoding="application/x-tex">h = 15</annotation></semantics></math>. What is the tallest AVL tree that could hold 1,000 keys? Construct an AVL tree of height 4 with exactly seven nodes.</p></li>
+<li><p>In <code>rebalance</code>, the test for the inside case is <code>balance(*link-&gt;left) &lt; 0</code>. After an <em>insertion</em>, the left child’s balance factor at this point is never zero. After a <em>removal</em>, it can be. Draw a tree in which removing one key leaves a node with balance factor <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>+</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">+2</annotation></semantics></math> whose left child has balance factor 0, and confirm that the code handles it correctly with a single rotation.</p></li>
+<li><p>Explain why, after an insertion into an AVL tree, at most one call to <code>rebalance</code> on the path to the root actually performs a rotation. (Consider the height of the rotated subtree before the insertion and after the rotation.) Then give an example in which a single removal causes rotations at two different levels.</p></li>
+<li><p>Perform mutation testing on <code>avl.hpp</code>. For each change, record whether the differential test alone catches it and whether <code>check_invariant</code> catches it. (a) Delete the body of <code>rebalance</code> except for <code>update(*link)</code>. (b) In <code>rotate_right</code>, omit the first <code>update</code>. (c) Swap the two rotation calls in the left-heavy branch. (d) In <code>erase</code>, omit the final call to <code>rebalance</code>. What does this tell you about what each kind of test is able to see?</p></li>
+<li><p>Add <code>const K* lower_bound(const K&amp; key) const</code> to <code>AvlTree</code>. Then add a member <code>std::size_t rank(const K&amp; key) const</code> that returns the number of keys less than <code>key</code> in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math> time. (Hint: store in each node the size of its subtree, and maintain it wherever the height is maintained.)</p></li>
+<li><p>Insert the keys 10, 20, 30, 40, 50, 60, 70, 80, 90 in order into a B-tree whose nodes hold at most three keys, using the split rule of this chapter. Draw the tree after each split. What is the height at the end?</p></li>
+<li><p>A B-tree’s nodes hold at most 255 keys, and every node except the root is at least half full. What is the largest possible height of such a tree holding one billion keys? What is the smallest?</p></li>
+<li><p>Describe, with pictures, how to remove a key from a B-tree <em>leaf</em> in each of these situations: (a) the leaf still has enough keys afterward; (b) the leaf is now too empty, but a neighboring sibling has a key to spare; (c) the leaf is too empty and so is its sibling. (You are designing the algorithm; check your design against a textbook afterward.)</p></li>
+<li><p>A program records sensor readings as <code>(timestamp, value)</code> pairs and must answer: “what was the most recent reading at or before time <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>t</mi><annotation encoding="application/x-tex">t</annotation></semantics></math>?” Readings arrive in increasing order of timestamp. Which of the three containers in the table of <a href="#sec:ordered-maps">Section 7.5</a> would you use, and how would you answer the query? Would your answer change if readings could arrive out of order?</p></li>
+<li><p><strong>With a model, as critic.</strong> Without looking at <code>avl.hpp</code>, write <code>rotate_left</code> and <code>rotate_right</code> for a tree with <em>raw</em> child pointers and a <code>parent</code> pointer in each node, as many textbook implementations have. Count how many pointers each rotation must update. Then ask a model to “list every pointer that a left rotation must update in a tree with parent pointers, including the cases where a subtree is empty or the rotated node is the root,” and compare its list with your code. Whose list was complete?</p></li>
+<li><p><strong>Lab.</strong> Build <code>AvlMap&lt;K, V&gt;</code>, an ordered map, with <code>put</code>, <code>find</code>, <code>erase</code>, <code>lower_bound</code>, and in-order iteration by a <code>for_each</code> function. Use it to implement an <em>interval scheduler</em>: store appointments keyed by start time, and support “add an appointment unless it overlaps an existing one” in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math> time. (Which existing appointments could a new one possibly overlap? You need to look at only two.) Test the map differentially against <code>std::map</code>, with the invariant check running after every operation.</p></li>
+</ol>
+</section>
+<section id="sec:balance-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Chapter notes</h2>
+<p>The AVL tree is from a four-page paper of 1962 <span class="citation" data-cites="adelson1962">(<a href="#ref-adelson1962" role="doc-biblioref">Adelson-Velsky and Landis 1962</a>)</span>, the first self-balancing search tree. Red-black trees originate with Bayer’s “symmetric binary B-trees” of 1972 and were given their colors, and their modern formulation, by Guibas and Sedgewick <span class="citation" data-cites="guibas1978">(<a href="#ref-guibas1978" role="doc-biblioref">Guibas and Sedgewick 1978</a>)</span>; they are best understood as binary encodings of B-trees with at most three keys per node, a correspondence that Sedgewick and Wayne <span class="citation" data-cites="sedgewick2011">(<a href="#ref-sedgewick2011" role="doc-biblioref">Sedgewick and Wayne 2011</a>)</span> develop at length. Cormen et al. <span class="citation" data-cites="clrs2022">(<a href="#ref-clrs2022" role="doc-biblioref">Cormen et al. 2022</a>)</span> give the full red-black algorithms, including removal.</p>
+<p>The B-tree is due to Bayer and McCreight <span class="citation" data-cites="bayer1972">(<a href="#ref-bayer1972" role="doc-biblioref">Bayer and McCreight 1972</a>)</span>; Comer’s survey <span class="citation" data-cites="comer1979">(<a href="#ref-comer1979" role="doc-biblioref">Comer 1979</a>)</span>, titled “The Ubiquitous B-Tree” when the structure was less than a decade old, remains a fine introduction. On the randomized alternatives, see Pugh on skip lists <span class="citation" data-cites="pugh1990">(<a href="#ref-pugh1990" role="doc-biblioref">Pugh 1990</a>)</span> and Seidel and Aragon on treaps <span class="citation" data-cites="seidel1996">(<a href="#ref-seidel1996" role="doc-biblioref">Seidel and Aragon 1996</a>)</span>; on splay trees, Sleator and Tarjan <span class="citation" data-cites="sleator1985">(<a href="#ref-sleator1985" role="doc-biblioref">Sleator and Tarjan 1985</a>)</span>. Knuth <span class="citation" data-cites="knuth1998">(<a href="#ref-knuth1998" role="doc-biblioref">Knuth 1998</a>)</span> covers balanced trees in depth and derives the AVL height bound quoted here.</p>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-adelson1962" class="csl-entry" role="listitem">
+Adelson-Velsky, G. M., and E. M. Landis. 1962. <span>“An Algorithm for the Organization of Information.”</span> <em>Soviet Mathematics Doklady</em> 3: 1259–63.
+</div>
+<div id="ref-bayer1972" class="csl-entry" role="listitem">
+Bayer, Rudolf, and Edward M. McCreight. 1972. <span>“Organization and Maintenance of Large Ordered Indexes.”</span> <em>Acta Informatica</em> 1 (3): 173–89.
+</div>
+<div id="ref-comer1979" class="csl-entry" role="listitem">
+Comer, Douglas. 1979. <span>“The Ubiquitous <span>B</span>-Tree.”</span> <em>ACM Computing Surveys</em> 11 (2): 121–37.
+</div>
+<div id="ref-clrs2022" class="csl-entry" role="listitem">
+Cormen, Thomas H., Charles E. Leiserson, Ronald L. Rivest, and Clifford Stein. 2022. <em>Introduction to Algorithms</em>. 4th ed. MIT Press.
+</div>
+<div id="ref-guibas1978" class="csl-entry" role="listitem">
+Guibas, Leo J., and Robert Sedgewick. 1978. <span>“A Dichromatic Framework for Balanced Trees.”</span> In <em>Proceedings of the 19th Annual Symposium on Foundations of Computer Science (<span>FOCS</span>)</em>, 8–21.
+</div>
+<div id="ref-knuth1998" class="csl-entry" role="listitem">
+Knuth, Donald E. 1998. <em>The Art of Computer Programming, Volume 3: Sorting and Searching</em>. 2nd ed. Addison-Wesley.
+</div>
+<div id="ref-pugh1990" class="csl-entry" role="listitem">
+Pugh, William. 1990. <span>“Skip Lists: A Probabilistic Alternative to Balanced Trees.”</span> <em>Communications of the ACM</em> 33 (6): 668–76.
+</div>
+<div id="ref-sedgewick2011" class="csl-entry" role="listitem">
+Sedgewick, Robert, and Kevin Wayne. 2011. <em>Algorithms</em>. 4th ed. Addison-Wesley.
+</div>
+<div id="ref-seidel1996" class="csl-entry" role="listitem">
+Seidel, Raimund, and Cecilia R. Aragon. 1996. <span>“Randomized Search Trees.”</span> <em>Algorithmica</em> 16 (4–5): 464–97.
+</div>
+<div id="ref-sleator1985" class="csl-entry" role="listitem">
+Sleator, Daniel D., and Robert E. Tarjan. 1985. <span>“Self-Adjusting Binary Search Trees.”</span> <em>Journal of the ACM</em> 32 (3): 652–86.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="06-trees.html"><span>← Previous</span>Recursion and Trees</a>
+<a class="next" href="08-heaps-sorting.html"><span>Next →</span>Heaps and Sorting</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+<script src="assets/viz/core.js"></script>
+<script src="assets/viz/bst.js"></script>
+<script src="assets/viz/btree.js"></script>
+<script>Viz.mountAll();</script>
+</body>
+</html>

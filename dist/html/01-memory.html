@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory Is the Material · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-chapter">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Chapter 1: Memory Is the Material</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class="current"><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+<ol class="secs">
+<li><a href="#sec:first-program"><span class="n">1.1</span> A first program, and the machine that runs it</a></li>
+<li><a href="#sec:bytes"><span class="n">1.2</span> Objects are bytes</a></li>
+<li><a href="#sec:places"><span class="n">1.3</span> Variables are places</a></li>
+<li><a href="#sec:pointers"><span class="n">1.4</span> Pointers: addresses as values</a></li>
+<li><a href="#sec:lifetimes"><span class="n">1.5</span> Lifetimes: the stack and the heap</a></li>
+<li><a href="#sec:kit"><span class="n">1.6</span> The everyday kit: vector and string</a></li>
+<li><a href="#sec:tools"><span class="n">1.7</span> Tools that catch you</a></li>
+<li><a href="#sec:memory-ex">Exercises</a></li>
+<li><a href="#sec:memory-notes">Chapter notes</a></li>
+</ol>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:memory">
+<p class="kicker">
+Chapter 1 · Week 1
+</p>
+<h1>
+Memory Is the Material
+</h1>
+</header>
+<aside class="callout goals"><p class="callout-title"><span class="lab">This week</span></p>
+<p>By the end of this week you should be able to:</p>
+<ul>
+<li>compile and run a C++ program with warnings and sanitizers turned on;</li>
+<li>explain what an object’s type, size, address, and lifetime are;</li>
+<li>predict when C++ copies an object and when it shares one, and choose between passing by value, by reference, and by <code>const</code> reference;</li>
+<li>read and write code that uses pointers, including pointer arithmetic on arrays;</li>
+<li>draw the stack and the heap for a short program, and recognize a leak, a dangling pointer, and an out-of-bounds access when you see one.</li>
+</ul>
+</aside>
+<p>Here are two programs. The first is Python.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>b.append(<span class="dv">4</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(a))</span></code></pre></div>
+<p>The second is C++, and does what looks like the same thing.</p>
+<div class="listing"><div class="listing-file">code/ch01/copies.cpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> a<span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> b <span class="op">=</span> a<span class="op">;</span>   <span class="co">// b is a new vector: a copy of a</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>b<span class="op">.</span>push_back<span class="op">(</span><span class="dv">4</span><span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> a<span class="op">.</span>size<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39; &#39;</span> <span class="op">&lt;&lt;</span> b<span class="op">.</span>size<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span>   <span class="co">// prints 3 4</span></span></code></pre></div>
+</div>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 1.1</span></p>
+<p>The Python program prints the length of <code>a</code>. The C++ program prints the sizes of <code>a</code> and <code>b</code>. What does each print? Commit to an answer before you read on.</p>
+<details class="answer"><summary>Answer</summary>
+<p>Python prints <code>4</code>. C++ prints <code>3 4</code>. In Python (and Java, and JavaScript), <code>b = a</code> makes <code>b</code> a second name for the <em>same</em> list, so appending through <code>b</code> changes what <code>a</code> sees. In C++, <code>b = a</code> makes a <em>new</em> vector with its own copy of the three elements; <code>a</code> never hears about the fourth.</p>
+</details>
+</aside>
+<p>Neither language is wrong. They made different decisions about what a variable <em>is</em>. In Python, a variable is a label tied to an object that lives somewhere else, and assignment ties a second label to the same object. In C++, a variable <em>is</em> the object: a region of memory with a name, and assignment copies the contents of one region into another.</p>
+<p>That difference is the whole reason this course is taught in C++. A data structure is an arrangement of memory, and C++ is a language in which you can see, and must decide, how memory is arranged. This chapter is a fast tour of the machinery for doing that: objects, references, pointers, the stack, and the heap. It moves quickly, because you already know how to program. What you may not know yet is where your programs have been keeping things.</p>
+<section id="sec:first-program" class="level2">
+<h2><span class="secnum">1.1</span> A first program, and the machine that runs it</h2>
+<p>Tradition demands this one.</p>
+<div class="listing"><div class="listing-file">code/ch01/hello.cpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Hello, CMSC 270!</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>To run it you first <strong>compile</strong> it: a program called a compiler translates the text into machine instructions and writes them to a file, which you then run.</p>
+<pre class="console"><code>$ g++ -std=c++20 -Wall -Wextra -g -fsanitize=address,undefined hello.cpp -o hello
+$ ./hello
+Hello, CMSC 270!</code></pre>
+<p>If you have only used Python, notice what is different. There is no interpreter standing between your program and the processor while it runs. The translation happens once, ahead of time, and whole categories of mistakes (a misspelled name, a string where a number should be) are reported by the compiler before the program ever starts. The price is the extra step, and error messages that take some practice to read.</p>
+<p>A few words about the pieces. <code>#include &lt;iostream&gt;</code> pulls in the declarations for input and output. Execution begins at the function named <code>main</code>, which returns an <code>int</code> to the operating system: zero for success. <code>std::cout</code> is the standard output stream; <code>&lt;&lt;</code> sends things to it. The <code>std::</code> prefix says that <code>cout</code> belongs to the standard library’s namespace. Statements end with semicolons, and blocks are marked with braces, not indentation.</p>
+<p>The long compile command is worth understanding once, because you will use it all term.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Flag</th>
+<th style="text-align: left;">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>-std=c++20</code></td>
+<td style="text-align: left;">use the 2020 version of the language</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>-Wall -Wextra</code></td>
+<td style="text-align: left;">turn on the compiler’s warnings about suspicious code</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>-g</code></td>
+<td style="text-align: left;">include debugging information, so that tools can name lines</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>-fsanitize=address,undefined</code></td>
+<td style="text-align: left;">add run-time checks for memory errors and undefined behavior</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>-o hello</code></td>
+<td style="text-align: left;">name the output file <code>hello</code></td>
+</tr>
+</tbody>
+</table>
+<p>The middle three are your safety equipment. <a href="#sec:tools">Section 1.7</a> shows what they catch, and <a href="a1-toolchain.html">Appendix A</a> covers installation and has more on reading what the compiler says.</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Compiler errors in C++ can be long and strange, and explaining them is something language models do well. When you are stuck on one, try:</p>
+<blockquote>
+<p>Here is a C++ compiler error and the code that produced it. Explain in plain language what the compiler is complaining about and which line is the real cause. Do not give me corrected code; I want to fix it myself.</p>
+</blockquote>
+<p>The last sentence matters. An explanation teaches you to read the next error on your own. A silently corrected file teaches you nothing, and you will meet the same error again next week.</p>
+</aside>
+</section>
+<section id="sec:bytes" class="level2">
+<h2><span class="secnum">1.2</span> Objects are bytes</h2>
+<p>A computer’s memory is, to a very good approximation, one enormous row of numbered boxes. Each box is a <strong>byte</strong>: eight bits, enough to hold a number from 0 to 255. The number of a box is its <strong>address</strong>. A laptop with 16 gigabytes of memory has about sixteen billion boxes.</p>
+<p>That is all there is. Every integer, every string, every image, every tree and hash table in this book is, in the end, a pattern of values in some of those boxes. An <strong>object</strong>, in C++, is a region of memory that the program is using to hold a value. Every object has four properties, and this chapter is organized around them:</p>
+<ul>
+<li>a <strong>type</strong>, which says how to interpret its bytes;</li>
+<li>a <strong>size</strong>, the number of bytes it occupies;</li>
+<li>an <strong>address</strong>, the number of its first byte;</li>
+<li>a <strong>lifetime</strong>, the stretch of the program’s execution during which it exists.</li>
+</ul>
+<p>The <code>sizeof</code> operator reports sizes.</p>
+<div class="listing"><div class="listing-file">code/ch01/sizes.cpp</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;char:      &quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">char</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>          <span class="op">&lt;&lt;</span> <span class="st">&quot;bool:      &quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">bool</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>          <span class="op">&lt;&lt;</span> <span class="st">&quot;int:       &quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">int</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>          <span class="op">&lt;&lt;</span> <span class="st">&quot;long long: &quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">long</span> <span class="dt">long</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>          <span class="op">&lt;&lt;</span> <span class="st">&quot;double:    &quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">double</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>          <span class="op">&lt;&lt;</span> <span class="st">&quot;int*:      &quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">int</span><span class="op">*)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span></code></pre></div>
+</div>
+<p>On the machine this book was written on, and very likely on yours, that prints:</p>
+<pre class="console"><code>char:      1
+bool:      1
+int:       4
+long long: 8
+double:    8
+int*:      8</code></pre>
+<p>The standard guarantees only that a <code>char</code> is one byte and that the other integer types are at least certain minimum sizes; the numbers above are what current desktop and laptop systems use.</p>
+<p>So an <code>int</code> is four bytes: 32 bits. <a href="#fig:bytes">Figure 1.1</a> shows an <code>int</code> holding 270 and a <code>char</code> holding the letter A, sitting in memory.</p>
+<figure class="fig" id="fig:bytes"><svg class="figsvg" viewBox="0 0 640 150" width="640" height="150" role="img" aria-label="A row of numbered byte cells; four of them hold the int 270." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-none" x="44" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-none" x="90" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-accent-soft" x="136" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="159.0" y="69.0" text-anchor="middle" dominant-baseline="central" font-size="14">0E</text>
+<rect class="s-ink f-accent-soft" x="182" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="205.0" y="69.0" text-anchor="middle" dominant-baseline="central" font-size="14">01</text>
+<rect class="s-ink f-accent-soft" x="228" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="251.0" y="69.0" text-anchor="middle" dominant-baseline="central" font-size="14">00</text>
+<rect class="s-ink f-accent-soft" x="274" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="297.0" y="69.0" text-anchor="middle" dominant-baseline="central" font-size="14">00</text>
+<rect class="s-ink f-none" x="320" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-accent2-soft" x="366" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="389.0" y="69.0" text-anchor="middle" dominant-baseline="central" font-size="14">41</text>
+<rect class="s-ink f-none" x="412" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-none" x="458" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-none" x="504" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-none" x="550" y="50" width="46" height="38" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="67.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc10</text>
+<text class="t-muted mono" x="113.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc11</text>
+<text class="t-muted mono" x="159.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc12</text>
+<text class="t-muted mono" x="205.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc13</text>
+<text class="t-muted mono" x="251.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc14</text>
+<text class="t-muted mono" x="297.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc15</text>
+<text class="t-muted mono" x="343.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc16</text>
+<text class="t-muted mono" x="389.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc17</text>
+<text class="t-muted mono" x="435.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc18</text>
+<text class="t-muted mono" x="481.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc19</text>
+<text class="t-muted mono" x="527.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc1a</text>
+<text class="t-muted mono" x="573.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="10">fc1b</text>
+<text class="t-muted" x="36.0" y="100.0" text-anchor="end" dominant-baseline="central" font-size="11">…</text>
+<line class="s-accent f-none" x1="138.0" y1="44.0" x2="138.0" y2="38.0" stroke-width="1.3"/>
+<line class="s-accent f-none" x1="138.0" y1="38.0" x2="318.0" y2="38.0" stroke-width="1.3"/>
+<line class="s-accent f-none" x1="318.0" y1="38.0" x2="318.0" y2="44.0" stroke-width="1.3"/>
+<text class="t-accent" x="228.0" y="27.0" text-anchor="middle" dominant-baseline="central" font-size="12">int n = 270;  (4 bytes)</text>
+<line class="s-accent2 f-none" x1="368.0" y1="44.0" x2="368.0" y2="38.0" stroke-width="1.3"/>
+<line class="s-accent2 f-none" x1="368.0" y1="38.0" x2="410.0" y2="38.0" stroke-width="1.3"/>
+<line class="s-accent2 f-none" x1="410.0" y1="38.0" x2="410.0" y2="44.0" stroke-width="1.3"/>
+<text class="t-accent2" x="389.0" y="27.0" text-anchor="middle" dominant-baseline="central" font-size="12">char c = 'A';</text>
+<text class="t-muted" x="320.0" y="132.0" text-anchor="middle" dominant-baseline="central" font-size="12">addresses (last four hex digits) increase to the right</text>
+</svg><figcaption>
+<span class="fignum">Figure 1.1</span> Two objects in memory. The <code>int</code> occupies four consecutive bytes; 270 is <code>0x0000010E</code> in hexadecimal, and this machine stores the low-order byte first. The <code>char</code> occupies one byte; 65 (<code>0x41</code>) is the code for <code>A</code>. Nothing in the bytes themselves says which is a number and which is a letter. The type does that.
+</figcaption></figure>
+<p>Two consequences follow at once.</p>
+<p><strong>The type is not stored in memory.</strong> The four bytes of an <code>int</code> and the four bytes of a <code>float</code> look the same. It is the compiler, which knows the declared type of every variable, that decides to generate integer-addition instructions for one and floating-point instructions for the other. This is why C++ wants every variable’s type declared, or deducible, at compile time.</p>
+<p><strong>Fixed size means limited range.</strong> Thirty-two bits can distinguish about 4.3 billion values. For a signed <code>int</code> that is the range from −2,147,483,648 to 2,147,483,647. Adding 1 to the largest <code>int</code> does not produce a bigger number, because there is no room for one. For <em>unsigned</em> types the result wraps around to zero, reliably. For signed types the language says something more alarming, which we will come back to: the behavior is <em>undefined</em>.</p>
+<p>You can ask where an object lives with the address-of operator, <code>&amp;</code>.</p>
+<div class="listing"><div class="listing-file">code/ch01/sizes.cpp</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> n <span class="op">=</span> <span class="dv">270</span><span class="op">;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="dt">char</span> c <span class="op">=</span> <span class="ch">&#39;A&#39;</span><span class="op">;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> d <span class="op">=</span> <span class="fl">2.7</span><span class="op">;</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;n lives at &quot;</span> <span class="op">&lt;&lt;</span> <span class="op">&amp;</span>n <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>          <span class="op">&lt;&lt;</span> <span class="st">&quot;c lives at &quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">*&gt;(&amp;</span>c<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>          <span class="op">&lt;&lt;</span> <span class="st">&quot;d lives at &quot;</span> <span class="op">&lt;&lt;</span> <span class="op">&amp;</span>d <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span></code></pre></div>
+</div>
+<pre class="console"><code>n lives at 0x7ffd5ce7b7cc
+c lives at 0x7ffd5ce7b7cb
+d lives at 0x7ffd5ce7b7d0</code></pre>
+<p>Addresses are conventionally printed in hexadecimal. The exact values will differ on your machine and from run to run, but look at the pattern: <code>c</code> is at an address ending <code>cb</code>, <code>n</code> occupies the four bytes from <code>cc</code> through <code>cf</code>, and <code>d</code> begins at <code>d0</code>. The three variables are packed side by side. Memory is a row of boxes, and you have just read the numbers off three of them. (This output is from a build <em>without</em> <code>-fsanitize</code>. AddressSanitizer deliberately spaces local variables apart, with guard zones between them, so that it can catch one overrunning into the next; under it you will see larger gaps.)</p>
+<aside class="callout note"><p class="callout-title"><span class="lab">Aside</span></p>
+<p>One type deserves early mention. Sizes and indices in the standard library are of type <code>std::size_t</code>, an unsigned integer big enough to count every byte of memory (eight bytes on current machines). <code>v.size()</code> returns one. Because it is unsigned, it cannot be negative, and comparing it with a plain <code>int</code> earns a compiler warning, since a negative <code>int</code> would be silently reinterpreted as a huge positive number. The habit this book follows: use <code>std::size_t</code> for anything that is a size or an index into a container.</p>
+</aside>
+</section>
+<section id="sec:places" class="level2">
+<h2><span class="secnum">1.3</span> Variables are places</h2>
+<p>Return to the puzzle that opened the chapter. In C++ a variable names a region of memory, and initialization or assignment from another variable <strong>copies</strong>: the bytes that make up one object’s value are duplicated into the other. Afterward the two objects have nothing to do with each other.</p>
+<p>That is obviously what should happen for an <code>int</code>. C++ applies the same rule to everything, including types you define yourself.</p>
+<div class="listing"><div class="listing-file">code/ch01/copies.cpp</div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Point <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> x<span class="op">;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> y<span class="op">;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch01/copies.cpp</div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>Point p<span class="op">{</span><span class="fl">1.0</span><span class="op">,</span> <span class="fl">2.0</span><span class="op">};</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>Point q <span class="op">=</span> p<span class="op">;</span>      <span class="co">// copies both doubles</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>q<span class="op">.</span>x <span class="op">=</span> <span class="fl">99.0</span><span class="op">;</span>       <span class="co">// p.x is still 1.0</span></span></code></pre></div>
+</div>
+<p>A <code>struct</code> is a type made by placing other objects side by side; a <code>Point</code> is two <code>double</code>s, sixteen bytes. Copying it copies the sixteen bytes. For a <code>std::vector</code>, copying means allocating a new block of memory and copying every element into it, which is exactly why <code>a</code> and <code>b</code> in the opening example went their separate ways. This behavior is called <strong>value semantics</strong>: variables hold values, and copies are independent. The left side of <a href="#fig:copy-alias">Figure 1.2</a> shows the result.</p>
+<figure class="fig" id="fig:copy-alias"><svg class="figsvg" viewBox="0 0 640 200" width="640" height="200" role="img" aria-label="Left: two vectors with separate storage. Right: one int with two names." xmlns="http://www.w3.org/2000/svg">
+<text class="t-muted mono" x="30.0" y="18.0" text-anchor="start" dominant-baseline="central" font-size="12">std::vector&lt;int&gt; b = a;  b.push_back(4);</text>
+<text class="t-ink mono b" x="46.0" y="65.0" text-anchor="end" dominant-baseline="central" font-size="14">a</text>
+<rect class="s-ink f-muted-soft" x="56" y="48" width="70" height="34" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="91" cy="65" r="2.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="91.0" y1="65.0" x2="170.0" y2="65.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="176.0,65.0 167.0,61.4 167.0,68.6"/>
+<rect class="s-ink f-none" x="180" y="47" width="40" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="200.0" y="65.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<rect class="s-ink f-none" x="220" y="47" width="40" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="240.0" y="65.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<rect class="s-ink f-none" x="260" y="47" width="40" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="280.0" y="65.0" text-anchor="middle" dominant-baseline="central" font-size="14">3</text>
+<text class="t-ink mono b" x="46.0" y="141.0" text-anchor="end" dominant-baseline="central" font-size="14">b</text>
+<rect class="s-ink f-muted-soft" x="56" y="124" width="70" height="34" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="91" cy="141" r="2.8" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="91.0" y1="141.0" x2="170.0" y2="141.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="176.0,141.0 167.0,137.4 167.0,144.6"/>
+<rect class="s-ink f-none" x="180" y="123" width="40" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="200.0" y="141.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<rect class="s-ink f-none" x="220" y="123" width="40" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="240.0" y="141.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<rect class="s-ink f-none" x="260" y="123" width="40" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="280.0" y="141.0" text-anchor="middle" dominant-baseline="central" font-size="14">3</text>
+<rect class="s-ink f-accent2-soft" x="300" y="123" width="40" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="320.0" y="141.0" text-anchor="middle" dominant-baseline="central" font-size="14">4</text>
+<text class="t-muted" x="91.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="10">on the stack</text>
+<text class="t-muted" x="260.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="10">on the heap</text>
+<line class="s-muted f-none dash" x1="400.0" y1="12.0" x2="400.0" y2="188.0" stroke-width="1.3"/>
+<text class="t-muted mono" x="430.0" y="18.0" text-anchor="start" dominant-baseline="central" font-size="12">int&amp; alias = score;</text>
+<rect class="s-accent f-accent-soft" x="500" y="86" width="70" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="535.0" y="104.0" text-anchor="middle" dominant-baseline="central" font-size="14">11</text>
+<text class="t-ink mono b" x="450.0" y="70.0" text-anchor="start" dominant-baseline="central" font-size="14">score</text>
+<line class="s-ink f-none" x1="478.0" y1="80.0" x2="494.9" y2="90.8" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="500.0,94.0 494.3,86.1 490.5,92.2"/>
+<text class="t-accent mono b" x="450.0" y="140.0" text-anchor="start" dominant-baseline="central" font-size="14">alias</text>
+<line class="s-accent f-none" x1="478.0" y1="130.0" x2="495.1" y2="117.5" stroke-width="1.3"/>
+<polygon class="s-none f-accent" points="500.0,114.0 490.6,116.4 494.8,122.2"/>
+<text class="t-muted" x="535.0" y="150.0" text-anchor="middle" dominant-baseline="central" font-size="10">one object,</text>
+<text class="t-muted" x="535.0" y="164.0" text-anchor="middle" dominant-baseline="central" font-size="10">two names</text>
+</svg><figcaption>
+<span class="fignum">Figure 1.2</span> Left: in C++, <code>b = a</code> makes <code>b</code> a separate vector with its own storage, so appending to <code>b</code> leaves <code>a</code> alone. Right: a reference is a second name for the same object. The Python and Java meaning of <code>b = a</code> is the picture on the right.
+</figcaption></figure>
+<p>Value semantics is safe and predictable: nobody can change your object behind your back. It is also sometimes exactly what you do not want. A function that is supposed to modify the caller’s vector cannot do so if it only receives a copy. And copying a vector of a million elements, merely to add them up, does a million elements’ worth of pointless work.</p>
+<section id="sec:references" class="level3 unnumbered">
+<h3 class="unnumbered">References</h3>
+<p>For those situations C++ has <strong>references</strong>. A reference is another name for an existing object.</p>
+<div class="listing"><div class="listing-file">code/ch01/copies.cpp</div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> score <span class="op">=</span> <span class="dv">10</span><span class="op">;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">&amp;</span> alias <span class="op">=</span> score<span class="op">;</span>   <span class="co">// alias is another name for score</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>alias <span class="op">=</span> <span class="dv">11</span><span class="op">;</span>           <span class="co">// score is now 11</span></span></code></pre></div>
+</div>
+<p>The <code>&amp;</code> after the type makes <code>alias</code> a reference to an <code>int</code> and not an <code>int</code> of its own. No new integer is created. From that line on, <code>alias</code> and <code>score</code> are two names for one region of memory. A reference must be bound to an object when it is created, and it stays bound to that object for its whole life.</p>
+<p>References earn their keep in function parameters. There are three ways to pass an argument, and choosing among them is a decision you will make in every function you write for the rest of the course.</p>
+<div class="listing"><div class="listing-file">code/ch01/copies.cpp</div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// By value: the function gets its own copy. The caller&#39;s vector is safe,</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co">// but every element is copied on every call.</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> sum_by_value<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> total <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> v<span class="op">)</span> total <span class="op">+=</span> x<span class="op">;</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total<span class="op">;</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="co">// By const reference: no copy, and a promise not to modify.</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="co">// This is the default way to pass anything bigger than a few bytes.</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> sum<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&amp;</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> total <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> v<span class="op">)</span> total <span class="op">+=</span> x<span class="op">;</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total<span class="op">;</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a><span class="co">// By (non-const) reference: no copy, and the function may modify</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a><span class="co">// the caller&#39;s object. Use it when modification is the point.</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> double_all<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&amp;</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span><span class="op">&amp;</span> x <span class="op">:</span> v<span class="op">)</span> x <span class="op">*=</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The <code>const</code> in the middle version is a promise, enforced by the compiler, that the function will not modify the object it has been lent. This gives you the cheapness of sharing with the safety of copying, and it is the right default for anything larger than a number.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">You want to…</th>
+<th style="text-align: left;">Pass by</th>
+<th style="text-align: left;">Spelled</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">read a small, cheap thing (<code>int</code>, <code>double</code>, <code>char</code>, a pointer)</td>
+<td style="text-align: left;">value</td>
+<td style="text-align: left;"><code>int x</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">read anything bigger</td>
+<td style="text-align: left;"><code>const</code> reference</td>
+<td style="text-align: left;"><code>const std::vector&lt;int&gt;&amp; v</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">modify the caller’s object</td>
+<td style="text-align: left;">reference</td>
+<td style="text-align: left;"><code>std::vector&lt;int&gt;&amp; v</code></td>
+</tr>
+</tbody>
+</table>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 1.2</span></p>
+<p>What is wrong with this function, which is meant to set every element of a vector to zero?</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> clear_all<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span><span class="op">&amp;</span> x <span class="op">:</span> v<span class="op">)</span> x <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<details class="answer"><summary>Answer</summary>
+<p>It takes <code>v</code> by value, so it zeroes a private copy and then throws the copy away. The caller’s vector is untouched. The parameter should be <code>std::vector&lt;int&gt;&amp; v</code>. The compiler will not warn you: modifying your own copy is perfectly legal, merely useless.</p>
+</details>
+</aside>
+<p>The range-based <code>for</code> loop follows the same rules. <code>for (int x : v)</code> copies each element into <code>x</code> in turn; <code>for (int&amp; x : v)</code> makes <code>x</code> a reference to each element, so assigning to <code>x</code> changes the vector; <code>for (const std::string&amp; s : names)</code> reads each string without copying it.</p>
+</section>
+</section>
+<section id="sec:pointers" class="level2">
+<h2><span class="secnum">1.4</span> Pointers: addresses as values</h2>
+<p>You saw that <code>&amp;n</code> produces the address of <code>n</code>. An address is just a number, and numbers can be stored. A <strong>pointer</strong> is an object whose value is the address of another object.</p>
+<div class="listing"><div class="listing-file">code/ch01/pointers.cpp</div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> n <span class="op">=</span> <span class="dv">270</span><span class="op">;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> p <span class="op">=</span> <span class="op">&amp;</span>n<span class="op">;</span>     <span class="co">// p holds the address of n</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="op">*</span>p <span class="op">=</span> <span class="dv">271</span><span class="op">;</span>        <span class="co">// follow the pointer; assign to what it points at</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> n <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span>   <span class="co">// prints 271</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> nobody <span class="op">=</span> <span class="kw">nullptr</span><span class="op">;</span>    <span class="co">// a pointer that points at nothing</span></span></code></pre></div>
+</div>
+<p>Read <code>int* p</code> as “<code>p</code> is a pointer to <code>int</code>.” The unary <code>*</code> operator <strong>dereferences</strong> a pointer: <code>*p</code> means “the object whose address is in <code>p</code>.” So <code>*p = 271</code> stores 271 into <code>n</code> by way of its address.</p>
+<p>A pointer can also hold the special value <code>nullptr</code>, meaning that it points at nothing. Dereferencing a null pointer is an error; on most systems the program crashes immediately, which is the <em>good</em> outcome, as we will see.</p>
+<p>For pointers to structs there is a shorthand that you will type thousands of times this term.</p>
+<div class="listing"><div class="listing-file">code/ch01/pointers.cpp</div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>Point pt<span class="op">{</span><span class="fl">3.0</span><span class="op">,</span> <span class="fl">4.0</span><span class="op">};</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>Point<span class="op">*</span> pp <span class="op">=</span> <span class="op">&amp;</span>pt<span class="op">;</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="op">(*</span>pp<span class="op">).</span>x <span class="op">=</span> <span class="fl">5.0</span><span class="op">;</span>   <span class="co">// follow pp, then select member x</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>pp<span class="op">-&gt;</span>y <span class="op">=</span> <span class="fl">12.0</span><span class="op">;</span>    <span class="co">// the same thing, spelled the way everyone spells it</span></span></code></pre></div>
+</div>
+<p>Pointers and references are close relatives: both let one piece of code reach an object that lives somewhere else. The differences are what make each useful.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;"></th>
+<th style="text-align: left;">Reference</th>
+<th style="text-align: left;">Pointer</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Can be null?</td>
+<td style="text-align: left;">no</td>
+<td style="text-align: left;">yes (<code>nullptr</code>)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Can be re-aimed at a different object?</td>
+<td style="text-align: left;">no</td>
+<td style="text-align: left;">yes</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Syntax to reach the object</td>
+<td style="text-align: left;">none; use it like the object</td>
+<td style="text-align: left;"><code>*p</code> or <code>p-&gt;member</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Typical use</td>
+<td style="text-align: left;">function parameters</td>
+<td style="text-align: left;">links inside data structures; optional or changing targets</td>
+</tr>
+</tbody>
+</table>
+<p>A linked list node must be able to say “there is no next node,” and must be able to change which node comes next. Those are things only a pointer can do, and it is why from <a href="04-links.html">Chapter 4</a> onward this book is full of pointers.</p>
+<section id="sec:arrays" class="level3 unnumbered">
+<h3 class="unnumbered">Arrays and pointer arithmetic</h3>
+<p>The oldest data structure is the <strong>array</strong>: some number of objects of the same type, placed side by side in memory with no gaps.</p>
+<div class="listing"><div class="listing-file">code/ch01/pointers.cpp</div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> a<span class="op">[</span><span class="dv">5</span><span class="op">]</span> <span class="op">=</span> <span class="op">{</span><span class="dv">10</span><span class="op">,</span> <span class="dv">20</span><span class="op">,</span> <span class="dv">30</span><span class="op">,</span> <span class="dv">40</span><span class="op">,</span> <span class="dv">50</span><span class="op">};</span>   <span class="co">// five ints, side by side</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> first <span class="op">=</span> a<span class="op">;</span>                    <span class="co">// an array&#39;s name converts to</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>                                   <span class="co">// a pointer to its first element</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(*</span>first <span class="op">==</span> <span class="dv">10</span><span class="op">);</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(*(</span>first <span class="op">+</span> <span class="dv">3</span><span class="op">)</span> <span class="op">==</span> <span class="dv">40</span><span class="op">);</span>        <span class="co">// three ints further along</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>a<span class="op">[</span><span class="dv">3</span><span class="op">]</span> <span class="op">==</span> <span class="op">*(</span>a <span class="op">+</span> <span class="dv">3</span><span class="op">));</span>          <span class="co">// indexing IS pointer arithmetic</span></span></code></pre></div>
+</div>
+<p>Because the elements are the same size and are contiguous, finding element <code>i</code> requires no searching. If the array starts at address <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math> and each element is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> bytes, then element <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> is at address <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mo>+</mo><mi>i</mi><mo>⋅</mo><mi>s</mi></mrow><annotation encoding="application/x-tex">A + i \cdot s</annotation></semantics></math>: one multiplication and one addition, however long the array is. <a href="#fig:array-arith">Figure 1.3</a> shows the arithmetic.</p>
+<figure class="fig" id="fig:array-arith"><svg class="figsvg" viewBox="0 0 640 170" width="640" height="170" role="img" aria-label="An array of five ints with the address of each element." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-none" x="110" y="46" width="76" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="148.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">10</text>
+<rect class="s-ink f-none" x="186" y="46" width="76" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="224.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">20</text>
+<rect class="s-ink f-none" x="262" y="46" width="76" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="300.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">30</text>
+<rect class="s-ink f-accent-soft" x="338" y="46" width="76" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="376.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">40</text>
+<rect class="s-ink f-none" x="414" y="46" width="76" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="452.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="14">50</text>
+<rect class="s-muted f-none dash" x="490" y="46" width="76" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="148.0" y="30.0" text-anchor="middle" dominant-baseline="central" font-size="12">a[0]</text>
+<text class="t-muted mono" x="148.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="11">1000</text>
+<text class="t-ink mono" x="224.0" y="30.0" text-anchor="middle" dominant-baseline="central" font-size="12">a[1]</text>
+<text class="t-muted mono" x="224.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="11">1004</text>
+<text class="t-ink mono" x="300.0" y="30.0" text-anchor="middle" dominant-baseline="central" font-size="12">a[2]</text>
+<text class="t-muted mono" x="300.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="11">1008</text>
+<text class="t-ink mono" x="376.0" y="30.0" text-anchor="middle" dominant-baseline="central" font-size="12">a[3]</text>
+<text class="t-muted mono" x="376.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="11">1012</text>
+<text class="t-ink mono" x="452.0" y="30.0" text-anchor="middle" dominant-baseline="central" font-size="12">a[4]</text>
+<text class="t-muted mono" x="452.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="11">1016</text>
+<text class="t-muted mono" x="528.0" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="11">1020</text>
+<text class="t-muted" x="98.0" y="100.0" text-anchor="end" dominant-baseline="central" font-size="11">address</text>
+<text class="t-muted" x="528.0" y="30.0" text-anchor="middle" dominant-baseline="central" font-size="10">one past the end</text>
+<line class="s-accent f-none" x1="376.0" y1="136.0" x2="376.0" y2="118.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent" points="376.0,112.0 372.4,121.0 379.6,121.0"/>
+<text class="t-accent mono" x="376.0" y="150.0" text-anchor="middle" dominant-baseline="central" font-size="12">a + 3  =  1000 + 3 × 4  =  1012</text>
+</svg><figcaption>
+<span class="fignum">Figure 1.3</span> An array of five <code>int</code>s beginning at address 1000. Each <code>int</code> is four bytes, so <code>a[3]</code> is at 1000 + 3 × 4 = 1012. The pointer expression <code>a + 3</code> computes that address; the compiler does the multiplying by four for you.
+</figcaption></figure>
+<p>Adding an integer to a pointer moves it forward by that many <em>elements</em>, not that many bytes; the compiler scales by the element size. And the indexing notation <code>a[i]</code> is <em>defined</em> to mean <code>*(a + i)</code>. Indexing is pointer arithmetic with nicer punctuation.</p>
+<p>Hold on to this fact. It is the first cost result of the course, and one of the most important:</p>
+<blockquote>
+<p><strong>Reaching an element of an array, given its index, takes the same small amount of time no matter how large the array is.</strong></p>
+</blockquote>
+<p>Everything that makes arrays, vectors, hash tables, and heaps fast comes back to it.</p>
+<p>Pointers can walk through an array, too.</p>
+<div class="listing"><div class="listing-file">code/ch01/pointers.cpp</div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> total <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span><span class="op">*</span> q <span class="op">=</span> a<span class="op">;</span> q <span class="op">!=</span> a <span class="op">+</span> <span class="dv">5</span><span class="op">;</span> <span class="op">++</span>q<span class="op">)</span> <span class="op">{</span>   <span class="co">// a + 5 is &quot;one past the end&quot;</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    total <span class="op">+=</span> <span class="op">*</span>q<span class="op">;</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The address <code>a + 5</code> does not belong to the array; it is the position just past the last element. Forming that “one past the end” address is permitted, precisely so that loops like this can use it as a stopping point. Dereferencing it is not. This pattern, a pair of positions marking a beginning and a just-past-the-end, is how all of C++’s standard library describes ranges, and <a href="03-vector.html">Chapter 3</a> returns to it.</p>
+</section>
+<section id="sec:ub" class="level3 unnumbered">
+<h3 class="unnumbered">No one checks</h3>
+<p>What happens if you write <code>a[7]</code>, when <code>a</code> has five elements?</p>
+<p>The compiler computes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mo>+</mo><mn>7</mn><mo>⋅</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">A + 7 \cdot 4</annotation></semantics></math> and reads whatever is there. Perhaps it is another variable. Perhaps it is bookkeeping data that some other part of the program depends on. There is no check that the index is in range, because a check costs time on every access, and C++ is built on the principle that you do not pay for what you do not ask for.</p>
+<p>The C++ standard calls a program that does this, or dereferences a null pointer, or overflows a signed integer, a program with <strong>undefined behavior</strong>. The term is exact: the language places <em>no requirements at all</em> on what such a program does. It may crash. It may print garbage. It may appear to work perfectly for months and then fail when the surrounding code changes. The compiler is allowed to assume that undefined behavior never happens and to optimize on that assumption, which can produce results that seem to defy logic.</p>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>“It ran and printed the right answer” is not evidence that a C++ program is correct. A program with undefined behavior often prints the right answer, on your machine, today. This is the single most important difference between C++ and the languages you already know, where an out-of-range index reliably raises an error.</p>
+</aside>
+<p>This sounds like a terrible deal, and without tools it would be. <a href="#sec:tools">Section 1.7</a> introduces the tools.</p>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Undefined behavior is a good way to calibrate how far to trust a model’s reading of code. Take one of the small buggy programs from this chapter’s <code>code/ch01/bugs/</code> directory and ask:</p>
+<blockquote>
+<p>What does this C++ program print? Answer precisely.</p>
+</blockquote>
+<p>A careful answer says that the program has undefined behavior and that no particular output is guaranteed. A careless one names a specific number. Try it a few times, and with a few different programs. You are not trying to catch the model out for sport; you are learning what kind of question tempts it to answer more confidently than the facts allow.</p>
+</aside>
+</section>
+</section>
+<section id="sec:lifetimes" class="level2">
+<h2><span class="secnum">1.5</span> Lifetimes: the stack and the heap</h2>
+<p>The fourth property of an object is its lifetime: when it comes into existence and when it ceases to exist. C++ gives you two main kinds of lifetime, and they correspond to two regions of memory.</p>
+<section id="sec:mem-stack" class="level3 unnumbered">
+<h3 class="unnumbered">Automatic storage: the stack</h3>
+<p>A variable declared inside a function is created when execution reaches its declaration and destroyed when execution leaves the enclosing block. You do nothing to make this happen, which is why such variables are said to have <strong>automatic</strong> storage.</p>
+<div class="listing"><div class="listing-file">code/ch01/lifetime.cpp</div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> square<span class="op">(</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> result <span class="op">=</span> x <span class="op">*</span> x<span class="op">;</span>   <span class="co">// result lives in square&#39;s stack frame</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> result<span class="op">;</span>        <span class="co">// its value is copied out; then the frame is gone</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> sum_of_squares<span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> s <span class="op">=</span> square<span class="op">(</span>a<span class="op">);</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> t <span class="op">=</span> square<span class="op">(</span>b<span class="op">);</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> s <span class="op">+</span> t<span class="op">;</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Automatic variables live in a region called the <strong>stack</strong>. When a function is called, a block of memory called a <strong>stack frame</strong> is set aside for its parameters and local variables, immediately beyond the frame of the function that called it. When the function returns, its frame is released, and the next call will reuse the same memory. Calls nest, so frames pile up and come off in last-in-first-out order, like a stack of plates. That is where the name comes from, and in <a href="04-links.html">Chapter 4</a> we will meet the stack again as a data structure in its own right.</p>
+<p>When <code>main</code> calls <code>sum_of_squares(3, 4)</code>, which calls <code>square(3)</code>, there are three frames on the stack. The variable <code>result</code> exists only while <code>square</code> is running. Its <em>value</em> is copied back to the caller as the return value; then the object itself is gone.</p>
+<p>Stack allocation is extremely cheap, since claiming a frame is a single adjustment of one processor register, and it requires no bookkeeping from you. It has two limitations. The stack is small, typically a few megabytes, so it is no place for a million-element array. And lifetimes are tied rigidly to function calls: nothing on the stack can outlive the function that created it.</p>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>That second limitation has teeth. A function must never return a reference or pointer to one of its own local variables:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">&amp;</span> biggest<span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> result <span class="op">=</span> <span class="op">(</span>a <span class="op">&gt;</span> b<span class="op">)</span> <span class="op">?</span> a <span class="op">:</span> b<span class="op">;</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> result<span class="op">;</span>   <span class="co">// result dies here; the reference outlives it</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The caller receives a reference to memory that is no longer an <code>int</code> and will shortly be overwritten by some other function’s frame. A pointer or reference to an object whose lifetime has ended is said to <strong>dangle</strong>. GCC warns about this one (<code>reference to local variable 'result' returned</code>), which is one reason we compile with warnings on. Return the value instead: <code>int biggest(int a, int b)</code>.</p>
+</aside>
+</section>
+<section id="sec:mem-heap" class="level3 unnumbered">
+<h3 class="unnumbered">Dynamic storage: the heap</h3>
+<p>For objects that must outlive the function that creates them, or whose size is not known until the program runs, there is a second region of memory, the <strong>heap</strong> (also called the free store). You request heap memory explicitly with <code>new</code>, which returns a pointer to it, and you return it explicitly with <code>delete</code>.</p>
+<div class="listing"><div class="listing-file">code/ch01/lifetime.cpp</div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Returns a pointer to n ints on the heap, all set to `fill`.</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="co">// The caller now OWNS that memory and must delete[] it.</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> make_array<span class="op">(</span><span class="dt">int</span> n<span class="op">,</span> <span class="dt">int</span> fill<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">*</span> block <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span>n<span class="op">];</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> block<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> fill<span class="op">;</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> block<span class="op">;</span>   <span class="co">// the pointer is copied out; the block lives on</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch01/lifetime.cpp</div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> one <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">{</span><span class="dv">42</span><span class="op">};</span>   <span class="co">// one int on the heap</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="op">*</span>one <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="kw">delete</span> one<span class="op">;</span>               <span class="co">// give it back</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> many <span class="op">=</span> make_array<span class="op">(</span><span class="dv">1000</span><span class="op">,</span> <span class="dv">7</span><span class="op">);</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>many<span class="op">[</span><span class="dv">999</span><span class="op">]</span> <span class="op">==</span> <span class="dv">7</span><span class="op">);</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="kw">delete</span><span class="op">[]</span> many<span class="op">;</span>            <span class="co">// arrays are returned with delete[]</span></span></code></pre></div>
+</div>
+<p>Look carefully at what lives where in <code>make_array</code>. The pointer variable <code>block</code> is a local variable on the stack, eight bytes holding an address. The thousand <code>int</code>s it points to are on the heap. When <code>make_array</code> returns, <code>block</code> is destroyed like any other local, but its value, the address, has been copied out to the caller, and the heap block is unaffected. Heap objects live until someone deletes them. <a href="#fig:stack-heap">Figure 1.4</a> lets you step through this and a few other small programs and watch both regions change.</p>
+<figure class="fig viz" id="fig:stack-heap"><div class="viz-widget" data-viz="memory"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 250" width="640" height="250" role="img" aria-label="Stack frames for main and make_array, and a heap block of four ints." xmlns="http://www.w3.org/2000/svg">
+<text class="t-ink b" x="160.0" y="18.0" text-anchor="middle" dominant-baseline="central" font-size="14">Stack</text>
+<text class="t-ink b" x="490.0" y="18.0" text-anchor="middle" dominant-baseline="central" font-size="14">Heap</text>
+<line class="s-muted f-none dash" x1="330.0" y1="8.0" x2="330.0" y2="242.0" stroke-width="1.3"/>
+<rect class="s-muted f-muted-soft" x="40" y="34" width="240" height="54" rx="0" stroke-width="1.3"/>
+<text class="t-muted b" x="50.0" y="46.0" text-anchor="start" dominant-baseline="central" font-size="11">main</text>
+<text class="t-ink mono" x="128.0" y="68.0" text-anchor="end" dominant-baseline="central" font-size="14">many</text>
+<rect class="s-ink f-none" x="138" y="54" width="96" height="28" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="186.0" y="68.0" text-anchor="middle" dominant-baseline="central" font-size="14">?</text>
+<rect class="s-accent f-accent-soft" x="40" y="98" width="240" height="136" rx="0" stroke-width="1.3"/>
+<text class="t-accent b" x="50.0" y="110.0" text-anchor="start" dominant-baseline="central" font-size="11">make_array</text>
+<text class="t-ink mono" x="128.0" y="138.0" text-anchor="end" dominant-baseline="central" font-size="14">n</text>
+<rect class="s-ink f-paper" x="138" y="124" width="96" height="28" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="186.0" y="138.0" text-anchor="middle" dominant-baseline="central" font-size="14">4</text>
+<text class="t-ink mono" x="128.0" y="172.0" text-anchor="end" dominant-baseline="central" font-size="14">fill</text>
+<rect class="s-ink f-paper" x="138" y="158" width="96" height="28" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="186.0" y="172.0" text-anchor="middle" dominant-baseline="central" font-size="14">7</text>
+<text class="t-ink mono" x="128.0" y="206.0" text-anchor="end" dominant-baseline="central" font-size="14">block</text>
+<rect class="s-ink f-paper" x="138" y="192" width="96" height="28" rx="0" stroke-width="1.3"/>
+<circle class="s-ink f-ink" cx="186" cy="206" r="2.8" stroke-width="1.3"/>
+<path class="s-ink f-none" d="M186.0,206.0 Q300.0,220.0 396.0,170.0" stroke-width="1.3"/>
+<polygon class="s-none f-ink" points="396.0,170.0 386.4,171.0 389.7,177.4"/>
+<rect class="s-ink f-accent2-soft" x="400" y="140" width="44" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="422.0" y="158.0" text-anchor="middle" dominant-baseline="central" font-size="14">7</text>
+<text class="t-muted mono" x="422.0" y="187.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-ink f-accent2-soft" x="444" y="140" width="44" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="466.0" y="158.0" text-anchor="middle" dominant-baseline="central" font-size="14">7</text>
+<text class="t-muted mono" x="466.0" y="187.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-ink f-accent2-soft" x="488" y="140" width="44" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="510.0" y="158.0" text-anchor="middle" dominant-baseline="central" font-size="14">7</text>
+<text class="t-muted mono" x="510.0" y="187.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-accent2-soft" x="532" y="140" width="44" height="36" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="554.0" y="158.0" text-anchor="middle" dominant-baseline="central" font-size="14">7</text>
+<text class="t-muted mono" x="554.0" y="187.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<text class="t-accent2 mono" x="488.0" y="118.0" text-anchor="middle" dominant-baseline="central" font-size="12">new int[4]</text>
+<text class="t-muted" x="488.0" y="212.0" text-anchor="middle" dominant-baseline="central" font-size="10">lives until someone calls delete[]</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 1.4</span> The stack and the heap during a call to <code>make_array</code>. Local variables, including pointers, live in stack frames that vanish when their function returns. Heap blocks persist until deleted. In the web edition, choose a program and step through it line by line.
+</figcaption></figure>
+<p>With that freedom comes an obligation. Every block obtained with <code>new</code> must be released with <code>delete</code> exactly once (and with <code>delete[]</code> if it was allocated with <code>new[]</code>). There are three ways to get this wrong, and each has a name.</p>
+<p>A <strong>memory leak</strong> is a block that is never deleted. If the only pointer to a heap block is overwritten or goes out of scope, the block can never be freed; it stays allocated until the program ends. A leak in a short program is harmless. A leak inside a loop in a program that runs for weeks is how servers die.</p>
+<p>A <strong>dangling pointer</strong>, or <strong>use after free</strong>, is a pointer that is used after the block it points to has been deleted. The memory may by then belong to some unrelated object. Reading through the pointer gives nonsense; writing through it corrupts whatever now lives there.</p>
+<p>A <strong>double free</strong> is deleting the same block twice, which corrupts the allocator’s own records.</p>
+<p>The second and third are undefined behavior. All three stem from one question that C++ leaves to you: for each block on the heap, <strong>who is responsible for deleting it?</strong> The usual word is <strong>ownership</strong>. In the code above, <code>make_array</code> hands ownership of the block to its caller, which is why the comment says so.</p>
+<aside class="callout byhand"><p class="callout-title"><span class="lab">By hand first</span></p>
+<p>For the next few weeks, whenever a program uses pointers or the heap, draw it: a column of stack frames with a box for each variable, a separate area for heap blocks, and an arrow from each pointer to what it points at. Step through the code and update the drawing by hand, crossing out frames as functions return. Do this on paper, without a model.</p>
+<p>There are two reasons. First, this drawing <em>is</em> the mental model that the rest of the course runs on, and you only acquire it by producing it yourself, slowly, a number of times. Second, language models are text predictors, not memory simulators. Ask one for a step-by-step memory diagram of pointer-heavy code and it will usually be right and sometimes be subtly wrong, with an arrow aimed at the wrong box, and until you can draw the diagram yourself you cannot tell which.</p>
+</aside>
+</section>
+<section id="sec:raii-preview" class="level3 unnumbered">
+<h3 class="unnumbered">What modern C++ does about it</h3>
+<p>If managing heap memory by hand is so error-prone, how does anyone write large programs in C++?</p>
+<p>By almost never doing it by hand. The central technique of modern C++ is to wrap each heap allocation inside an object whose own lifetime is automatic. <code>std::vector</code> is the leading example. A <code>vector</code> variable is a small object on the stack holding a pointer to a heap block where the elements live. When the vector’s lifetime ends, a special function called its <em>destructor</em> runs automatically and deletes the block. The heap memory gets the easy, automatic lifetime of a stack variable, and you never write <code>delete</code> at all.</p>
+<p>So the rule for everyday code is simple: <strong>use <code>std::vector</code> and <code>std::string</code>, and do not write <code>new</code> or <code>delete</code>.</strong></p>
+<p>This course is not everyday code, though. Our business is to understand how types like <code>vector</code> are built, so in <a href="03-vector.html">Chapter 3</a> you will write one, <code>new</code> and <code>delete</code> and all, and in later chapters you will build lists and trees out of individually allocated nodes. You will do it with the safety equipment on.</p>
+</section>
+</section>
+<section id="sec:kit" class="level2">
+<h2><span class="secnum">1.6</span> The everyday kit: <code>vector</code> and <code>string</code></h2>
+<p>You will lean on two standard library types from the first day. Here is a working knowledge of each.</p>
+<div class="listing"><div class="listing-file">code/ch01/vector_tour.cpp</div>
+<div class="sourceCode" id="cb22"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> v<span class="op">;</span>             <span class="co">// empty</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>v<span class="op">.</span>push_back<span class="op">(</span><span class="dv">10</span><span class="op">);</span>                <span class="co">// {10}</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>v<span class="op">.</span>push_back<span class="op">(</span><span class="dv">20</span><span class="op">);</span>                <span class="co">// {10, 20}</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>v<span class="op">.</span>push_back<span class="op">(</span><span class="dv">30</span><span class="op">);</span>                <span class="co">// {10, 20, 30}</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> v<span class="op">.</span>size<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span>  <span class="co">// 3</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> v<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span>      <span class="co">// 10: no bounds check</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> v<span class="op">.</span>at<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span>   <span class="co">// 30: at() checks and throws if bad</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>v<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="dv">25</span><span class="op">;</span>                      <span class="co">// {10, 25, 30}</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>v<span class="op">.</span>pop_back<span class="op">();</span>                   <span class="co">// {10, 25}</span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> zeros<span class="op">(</span><span class="dv">5</span><span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span>        <span class="co">// five 0.0s</span></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">&gt;</span> names<span class="op">{</span><span class="st">&quot;Ada&quot;</span><span class="op">,</span> <span class="st">&quot;Grace&quot;</span><span class="op">,</span> <span class="st">&quot;Barbara&quot;</span><span class="op">};</span></span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> name <span class="op">:</span> names<span class="op">)</span> <span class="op">{</span>   <span class="co">// read each, no copies</span></span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> name <span class="op">&lt;&lt;</span> <span class="ch">&#39; &#39;</span><span class="op">;</span></span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">double</span><span class="op">&amp;</span> z <span class="op">:</span> zeros<span class="op">)</span> <span class="op">{</span>                 <span class="co">// modify each in place</span></span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> <span class="fl">1.5</span><span class="op">;</span></span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>A <code>std::vector&lt;T&gt;</code> is a sequence of objects of type <code>T</code>, stored contiguously, that can grow. The type in angle brackets says what it holds. <code>push_back</code> appends; <code>size</code> reports the count; square brackets index from zero. Indexing with <code>[]</code> performs no bounds check, exactly as with a raw array, while <code>at()</code> checks and reports an error if the index is out of range.</p>
+<p><code>std::string</code> is similar, specialized for characters.</p>
+<div class="listing"><div class="listing-file">code/ch01/vector_tour.cpp</div>
+<div class="sourceCode" id="cb23"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>string s <span class="op">=</span> <span class="st">&quot;data&quot;</span><span class="op">;</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">+=</span> <span class="st">&quot; structures&quot;</span><span class="op">;</span>               <span class="co">// strings grow, like vectors</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>s<span class="op">.</span>size<span class="op">()</span> <span class="op">==</span> <span class="dv">15</span><span class="op">);</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>s<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">==</span> <span class="ch">&#39;d&#39;</span><span class="op">);</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>s<span class="op">.</span>substr<span class="op">(</span><span class="dv">5</span><span class="op">,</span> <span class="dv">6</span><span class="op">)</span> <span class="op">==</span> <span class="st">&quot;struct&quot;</span><span class="op">);</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>s<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;ruct&quot;</span><span class="op">)</span> <span class="op">==</span> <span class="dv">7</span><span class="op">);</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>s <span class="op">&lt;</span> <span class="st">&quot;database&quot;</span><span class="op">);</span>           <span class="co">// comparison is alphabetical</span></span></code></pre></div>
+</div>
+<p>Here is a complete small program in the style you will write this week. It reads numbers from standard input, however many there are, and reports on them.</p>
+<div class="listing"><div class="listing-file">code/ch01/stats.cpp</div>
+<div class="sourceCode" id="cb24"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> smallest<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&amp;</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> best <span class="op">=</span> v<span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>x <span class="op">&lt;</span> best<span class="op">)</span> best <span class="op">=</span> x<span class="op">;</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> best<span class="op">;</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> mean<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&amp;</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">long</span> <span class="dt">long</span> total <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> v<span class="op">)</span> total <span class="op">+=</span> x<span class="op">;</span></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;(</span>total<span class="op">)</span> <span class="op">/</span> <span class="kw">static_cast</span><span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;(</span>v<span class="op">.</span>size<span class="op">());</span></span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch01/stats.cpp</div>
+<div class="sourceCode" id="cb25"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> data<span class="op">;</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">;</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="bu">std::</span>cin <span class="op">&gt;&gt;</span> x<span class="op">)</span> <span class="op">{</span>   <span class="co">// read until input runs out</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>        data<span class="op">.</span>push_back<span class="op">(</span>x<span class="op">);</span>    <span class="co">// the vector grows as needed</span></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>data<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;no data</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;count:    &quot;</span> <span class="op">&lt;&lt;</span> data<span class="op">.</span>size<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span></span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a>              <span class="op">&lt;&lt;</span> <span class="st">&quot;smallest: &quot;</span> <span class="op">&lt;&lt;</span> smallest<span class="op">(</span>data<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span></span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a>              <span class="op">&lt;&lt;</span> <span class="st">&quot;mean:     &quot;</span> <span class="op">&lt;&lt;</span> mean<span class="op">(</span>data<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-17"><a href="#cb25-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> data<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-18"><a href="#cb25-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>data<span class="op">[</span>i<span class="op">]</span> <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-19"><a href="#cb25-19" aria-hidden="true" tabindex="-1"></a>            <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;negative value at index &quot;</span> <span class="op">&lt;&lt;</span> i <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span>
+<span id="cb25-20"><a href="#cb25-20" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb25-21"><a href="#cb25-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-22"><a href="#cb25-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<pre class="console"><code>$ ./stats &lt; stats.in
+count:    6
+smallest: -3
+mean:     13.6667
+negative value at index 2</code></pre>
+<p>Things to notice: the functions take the vector by <code>const</code> reference, so nothing is copied. The loop <code>while (std::cin &gt;&gt; x)</code> reads one number per iteration and stops when the input is exhausted. The index variable <code>i</code> is a <code>std::size_t</code>, to match the type of <code>data.size()</code>. And <code>mean</code> adds into a <code>long long</code>, so that a long list of large values does not overflow a 32-bit total.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 1.3</span></p>
+<p>The function <code>smallest</code> begins with <code>int best = v[0];</code>. Under what circumstances is that line a bug, and how does <code>main</code> protect against it?</p>
+<details class="answer"><summary>Answer</summary>
+<p>If <code>v</code> is empty there is no <code>v[0]</code>, and reading it is an out-of-bounds access: undefined behavior. <code>main</code> checks <code>data.empty()</code> and returns before calling <code>smallest</code>. A more defensive design would have <code>smallest</code> itself check, or state its requirement in a comment. Requirements like “must not be called on an empty vector” are called <em>preconditions</em>, and we will be much more deliberate about them starting in <a href="03-vector.html">Chapter 3</a>.</p>
+</details>
+</aside>
+</section>
+<section id="sec:tools" class="level2">
+<h2><span class="secnum">1.7</span> Tools that catch you</h2>
+<p>The fourth of the book’s questions is <em>how do you know?</em> This section is its first appearance, and it is about not having to rely on luck.</p>
+<p>Here is a program with a classic mistake: the loop condition uses <code>&lt;=</code> where it should use <code>&lt;</code>, so the last iteration reads one element past the end of the vector.</p>
+<div class="listing"><div class="listing-file">code/ch01/bugs/oob.cpp</div>
+<div class="sourceCode" id="cb27"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;vector&gt;</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> v<span class="op">{</span><span class="dv">10</span><span class="op">,</span> <span class="dv">20</span><span class="op">,</span> <span class="dv">30</span><span class="op">};</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> total <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;=</span> v<span class="op">.</span>size<span class="op">();</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span>   <span class="co">// bug: &lt;= should be &lt;</span></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> v<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> total <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Compiled plainly, with no special flags, and run three times, it prints:</p>
+<pre class="console"><code>60
+60
+60</code></pre>
+<p>That is the correct sum of 10, 20, and 30. The out-of-bounds read happened to find a zero. The program has undefined behavior, and it looks perfectly healthy. Submit it, and it might fail on the grader’s machine, or it might not fail for a year.</p>
+<p>Now compile it with the flags from the beginning of the chapter, and run it again.</p>
+<pre class="console"><code>$ g++ -std=c++20 -Wall -Wextra -g -fsanitize=address,undefined oob.cpp -o oob
+$ ./oob
+==21309==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x50200000001c
+READ of size 4 at 0x50200000001c thread T0
+    #0 0x5be00d361731 in main ch01/bugs/oob.cpp:8
+    ...
+0x50200000001c is located 0 bytes after 12-byte region [0x502000000010,0x50200000001c)
+allocated by thread T0 here:
+    #0 0x78b4b38fe548 in operator new(unsigned long)
+    ...</code></pre>
+<p>The program now stops at the moment of the bad access and tells you what happened (a read of 4 bytes beyond a heap block), where (<code>oob.cpp</code>, line 8), and what it ran into (the end of a 12-byte region, which is three <code>int</code>s). This is <strong>AddressSanitizer</strong>, enabled by <code>-fsanitize=address</code> <span class="citation" data-cites="serebryany2012">(<a href="#ref-serebryany2012" role="doc-biblioref">Serebryany et al. 2012</a>)</span>. It works by having the compiler insert a check before every memory access and by surrounding every allocation with poisoned “red zones.” It roughly doubles a program’s running time, which is a bargain.</p>
+<p>AddressSanitizer catches all three of the heap errors described in <a href="#sec:lifetimes">Section 1.5</a>. A use after free:</p>
+<div class="listing"><div class="listing-file">code/ch01/bugs/dangling.cpp</div>
+<div class="sourceCode" id="cb30"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">*</span> p <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">{</span><span class="dv">42</span><span class="op">};</span></span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span> p<span class="op">;</span>                 <span class="co">// the int is gone...</span></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="op">*</span>p <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span>  <span class="co">// ...but p still holds its old address</span></span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<pre class="console"><code>==21312==ERROR: AddressSanitizer: heap-use-after-free on address 0x502000000010
+READ of size 4 at 0x502000000010 thread T0
+    #0 0x5f9fdc021475 in main ch01/bugs/dangling.cpp:6
+    ...
+freed by thread T0 here:
+    #1 0x5f9fdc021309 in main ch01/bugs/dangling.cpp:5</code></pre>
+<p>Without the sanitizer, the same program printed <code>-452675544</code> on one run. A leak:</p>
+<div class="listing"><div class="listing-file">code/ch01/bugs/leak.cpp</div>
+<div class="sourceCode" id="cb32"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> make_array<span class="op">(</span><span class="dt">int</span> n<span class="op">,</span> <span class="dt">int</span> fill<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">*</span> block <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span>n<span class="op">];</span></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> block<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> fill<span class="op">;</span></span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> block<span class="op">;</span></span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">*</span> scores <span class="op">=</span> make_array<span class="op">(</span><span class="dv">1000</span><span class="op">,</span> <span class="dv">7</span><span class="op">);</span></span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> make_array<span class="op">(</span><span class="dv">2000</span><span class="op">,</span> <span class="dv">9</span><span class="op">);</span>   <span class="co">// the first block is now unreachable</span></span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> scores<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span><span class="op">[]</span> scores<span class="op">;</span></span>
+<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<pre class="console"><code>==21315==ERROR: LeakSanitizer: detected memory leaks
+Direct leak of 4000 byte(s) in 1 object(s) allocated from:
+    #1 0x5c7e03bb1385 in make_array(int, int) ch01/bugs/leak.cpp:4
+    #2 0x5c7e03bb1486 in main ch01/bugs/leak.cpp:10</code></pre>
+<p>Four thousand bytes is a thousand <code>int</code>s: the first block, whose only pointer was overwritten on line 11.</p>
+<p>The other half of the flag, <code>-fsanitize=undefined</code>, enables <strong>UndefinedBehaviorSanitizer</strong>, which catches a different family of errors, such as signed overflow.</p>
+<pre class="console"><code>overflow.cpp:5:9: runtime error: signed integer overflow:
+2147483647 + 1 cannot be represented in type &#39;int&#39;</code></pre>
+<p>Sanitizers only examine the code that actually runs. If your tests never trigger the faulty line, the sanitizer never sees it. So the tools do not relieve you of testing; they make your tests far more informative. A test that passes under the sanitizers has shown not only that the output was right but that no memory error occurred along the way.</p>
+<p>One more tool is so simple that it is easy to overlook: <code>assert</code>. Writing <code>assert(condition);</code> (after <code>#include &lt;cassert&gt;</code>) makes the program stop with a message if the condition is false. Assertions are how you write down what you believe to be true at a point in the program, in a form the machine will check. The example programs in this book use them constantly, and so should yours.</p>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>Memory errors are not a beginner’s problem that professionals grow out of. For years, large software vendors have reported that the majority of their serious security vulnerabilities trace back to memory-safety bugs in C and C++ code: out-of-bounds accesses and uses after free, the same two bugs you just watched a sanitizer catch. This is a principal reason for the industry’s growing interest in memory-safe languages such as Rust, and for the steady movement of C++ itself toward safer defaults. It is also why this book has you compile with sanitizers from day one. The habit is professional practice, not training wheels.</p>
+</aside>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">A C++ object</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+At an address, occupying <code>sizeof</code> bytes. Local variables live in their function’s stack frame. Objects created with <code>new</code> live on the heap. A <code>vector</code> or <code>string</code> variable is a small object that owns a block on the heap.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+Its type says how its bytes are interpreted. A variable is the object itself, so assignment copies. A reference is another name for an existing object. A pointer holds an address and may be null.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+Reaching element <code>i</code> of an array is one multiplication and one addition, regardless of the array’s length. Stack allocation is nearly free. Copying costs time proportional to the size of the thing copied, which is why large objects are passed by <code>const</code> reference.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+Compiler warnings, AddressSanitizer, UndefinedBehaviorSanitizer, and <code>assert</code>. A program that merely prints the right answer has not been shown to be correct.
+</dd>
+</dl>
+</aside>
+</section>
+<section id="sec:memory-ex" class="level2 unnumbered">
+<h2 class="unnumbered">Exercises</h2>
+<ol type="1">
+<li><p>Compile and run <code>hello.cpp</code> with the full compile command from this chapter. Then introduce three different errors, one at a time (delete a semicolon, misspell <code>cout</code>, remove the <code>#include</code>), and read what the compiler says about each. Which messages point at the actual mistake, and which point somewhere nearby?</p></li>
+<li><p>Write a program that prints <code>sizeof</code> for <code>short</code>, <code>long</code>, <code>float</code>, <code>long double</code>, <code>std::size_t</code>, <code>std::string</code>, and <code>std::vector&lt;int&gt;</code>. The last two results are small and do not depend on how much the string or vector holds. Explain why, in terms of where their contents live.</p></li>
+<li><p>Without running it, predict the output of this program. Then run it and check.</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> bump<span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span><span class="op">&amp;</span> b<span class="op">,</span> <span class="dt">int</span><span class="op">*</span> c<span class="op">)</span> <span class="op">{</span> a <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span> b <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">*</span>c <span class="op">+=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x <span class="op">=</span> <span class="dv">10</span><span class="op">,</span> y <span class="op">=</span> <span class="dv">20</span><span class="op">,</span> z <span class="op">=</span> <span class="dv">30</span><span class="op">;</span></span>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a>    bump<span class="op">(</span>x<span class="op">,</span> y<span class="op">,</span> <span class="op">&amp;</span>z<span class="op">);</span></span>
+<span id="cb35-6"><a href="#cb35-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> x <span class="op">&lt;&lt;</span> <span class="ch">&#39; &#39;</span> <span class="op">&lt;&lt;</span> y <span class="op">&lt;&lt;</span> <span class="ch">&#39; &#39;</span> <span class="op">&lt;&lt;</span> z <span class="op">&lt;&lt;</span> <span class="ch">&#39;</span><span class="sc">\n</span><span class="ch">&#39;</span><span class="op">;</span></span>
+<span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></li>
+<li><p>Write a function <code>void swap_ints(int&amp; a, int&amp; b)</code> that exchanges the values of its two arguments. Then write <code>void swap_ints(int* a, int* b)</code> that does the same through pointers. How do the two calls look different at the call site? Which version makes it more obvious to a reader of the <em>calling</em> code that the arguments may be modified?</p></li>
+<li><p>Given <code>int a[6] = {5, 10, 15, 20, 25, 30};</code> and <code>int* p = a + 2;</code>, give the value of each expression, or say that it is undefined: <code>*p</code>, <code>p[1]</code>, <code>*(p - 2)</code>, <code>p[-1]</code>, <code>*(a + 6)</code>, <code>p - a</code>, <code>&amp;a[4] - p</code>.</p></li>
+<li><p>Draw the stack and heap, by hand, at the moment just before <code>make_array</code> returns in the <code>lifetime.cpp</code> example when it is called as <code>make_array(3, 7)</code>. Then draw them again just after it returns. Which boxes disappeared?</p></li>
+<li><p>Each of these functions has a lifetime or ownership bug. Name the bug (leak, dangling, double free, or out-of-bounds) and say how to fix it.</p>
+<div class="sourceCode" id="cb36"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> f1<span class="op">()</span> <span class="op">{</span> <span class="dt">int</span> x <span class="op">=</span> <span class="dv">5</span><span class="op">;</span> <span class="cf">return</span> <span class="op">&amp;</span>x<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> f2<span class="op">()</span> <span class="op">{</span> <span class="dt">int</span><span class="op">*</span> p <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">10</span><span class="op">];</span> p <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">20</span><span class="op">];</span> <span class="kw">delete</span><span class="op">[]</span> p<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-5"><a href="#cb36-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> f3<span class="op">()</span> <span class="op">{</span> <span class="dt">int</span><span class="op">*</span> p <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">};</span> <span class="dt">int</span><span class="op">*</span> q <span class="op">=</span> p<span class="op">;</span> <span class="kw">delete</span> p<span class="op">;</span> <span class="kw">delete</span> q<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb36-6"><a href="#cb36-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-7"><a href="#cb36-7" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> f4<span class="op">()</span> <span class="op">{</span> <span class="dt">int</span><span class="op">*</span> p <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">4</span><span class="op">]{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">};</span> <span class="dt">int</span> s <span class="op">=</span> p<span class="op">[</span><span class="dv">4</span><span class="op">];</span> <span class="kw">delete</span><span class="op">[]</span> p<span class="op">;</span> <span class="cf">return</span> s<span class="op">;</span> <span class="op">}</span></span></code></pre></div></li>
+<li><p>Compile each program in <code>code/ch01/bugs/</code> twice, once with only <code>-std=c++20</code> and once with the full set of flags, and run both versions. Make a table: for each program, what did the plain build do, and what did the sanitized build report? Was the plain build’s behavior the same every time you ran it?</p></li>
+<li><p>Write a function <code>std::vector&lt;int&gt; evens(const std::vector&lt;int&gt;&amp; v)</code> that returns a new vector containing only the even elements of <code>v</code>, in order. Why is it safe to return a <code>vector</code> by value when it was not safe to return a reference to a local variable?</p></li>
+<li><p>Write a function <code>bool is_palindrome(const std::string&amp; s)</code> that reports whether <code>s</code> reads the same forwards and backwards. Use two indices that start at opposite ends and move toward each other. What should it return for the empty string, and why?</p></li>
+<li><p>The expression <code>v.size() - 1</code> is dangerous when <code>v</code> is empty. Explain what value it has and why, and rewrite the loop <code>for (std::size_t i = 0; i &lt;= v.size() - 1; ++i)</code> so that it is correct for every vector, including the empty one.</p></li>
+<li><p><strong>With a model, as critic.</strong> Write a function that reverses a <code>std::vector&lt;int&gt;</code> in place, and test it yourself on vectors of length 0, 1, 2, and 5. <em>Then</em> give your function to a language model with the prompt: “Do not rewrite this. List any inputs for which it misbehaves, and any C++ style problems.” Evaluate each of its claims: which were correct, which were wrong, and which were matters of taste?</p></li>
+<li><p><strong>Lab.</strong> Write a program <code>histogram</code> that reads whole numbers between 0 and 100 from standard input and prints a text histogram with one row per range of ten (0–9, 10–19, and so on), using one <code>*</code> per value in the range. Store the counts in a <code>std::vector&lt;int&gt;</code>. Decide what the program should do with a number outside 0–100 and with the value 100 itself, and document your decision in a comment. The program must run cleanly under both sanitizers on an input file of your own devising that includes those edge cases.</p></li>
+</ol>
+</section>
+<section id="sec:memory-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Chapter notes</h2>
+<p>This chapter compresses a great deal of C++ into a few pages. For a fuller and gentler introduction to the language by its designer, see Stroustrup’s <em>Programming: Principles and Practice Using C++</em> <span class="citation" data-cites="stroustrup2024">(<a href="#ref-stroustrup2024" role="doc-biblioref">Stroustrup 2024</a>)</span>; for a brisk overview aimed at people who already program, his <em>A Tour of C++</em> <span class="citation" data-cites="stroustrup2022">(<a href="#ref-stroustrup2022" role="doc-biblioref">Stroustrup 2022</a>)</span>. The reference site cppreference.com <span class="citation" data-cites="cppreference">(<a href="#ref-cppreference" role="doc-biblioref"><span>“Cppreference.com: <span>C++</span> Reference”</span> 2026</a>)</span> is the place to look up any library function or language rule, and is more reliable than a model’s recollection of the same.</p>
+<p>The picture of memory given here, a flat row of bytes with a stack and a heap, is a simplification of what the operating system and hardware provide. Bryant and O’Hallaron’s <em>Computer Systems: A Programmer’s Perspective</em> <span class="citation" data-cites="bryant2016">(<a href="#ref-bryant2016" role="doc-biblioref">Bryant and O’Hallaron 2016</a>)</span> gives the real story, and is the natural next book if this chapter made you curious. AddressSanitizer is described by its authors in <span class="citation" data-cites="serebryany2012">Serebryany et al. (<a href="#ref-serebryany2012" role="doc-biblioref">2012</a>)</span>. The advice to prefer <code>vector</code> and <code>string</code> and to avoid naked <code>new</code> and <code>delete</code> follows the C++ Core Guidelines <span class="citation" data-cites="coreguidelines">(<a href="#ref-coreguidelines" role="doc-biblioref">Stroustrup and Sutter 2026</a>)</span>, which are worth browsing as a statement of what experienced C++ programmers consider good practice.</p>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-bryant2016" class="csl-entry" role="listitem">
+Bryant, Randal E., and David R. O’Hallaron. 2016. <em>Computer Systems: A Programmer’s Perspective</em>. 3rd ed. Pearson.
+</div>
+<div id="ref-cppreference" class="csl-entry" role="listitem">
+<span>“Cppreference.com: <span>C++</span> Reference.”</span> 2026. <a href="https://en.cppreference.com/">https://en.cppreference.com/</a>.
+</div>
+<div id="ref-serebryany2012" class="csl-entry" role="listitem">
+Serebryany, Konstantin, Derek Bruening, Alexander Potapenko, and Dmitry Vyukov. 2012. <span>“<span>AddressSanitizer</span>: A Fast Address Sanity Checker.”</span> In <em>Proceedings of the 2012 <span>USENIX</span> Annual Technical Conference</em>, 309–18.
+</div>
+<div id="ref-stroustrup2022" class="csl-entry" role="listitem">
+Stroustrup, Bjarne. 2022. <em>A Tour of <span>C++</span></em>. 3rd ed. Addison-Wesley.
+</div>
+<div id="ref-stroustrup2024" class="csl-entry" role="listitem">
+———. 2024. <em>Programming: Principles and Practice Using <span>C++</span></em>. 3rd ed. Addison-Wesley.
+</div>
+<div id="ref-coreguidelines" class="csl-entry" role="listitem">
+Stroustrup, Bjarne, and Herb Sutter. 2026. <span>“<span>C++</span> Core Guidelines.”</span> <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines">https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines</a>.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="00-preface.html"><span>← Previous</span>Read This First</a>
+<a class="next" href="02-cost.html"><span>Next →</span>What Does It Cost?</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+<script src="assets/viz/core.js"></script>
+<script src="assets/viz/memory.js"></script>
+<script>Viz.mountAll();</script>
+</body>
+</html>

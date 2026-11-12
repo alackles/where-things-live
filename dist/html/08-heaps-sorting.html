@@ -1,0 +1,1041 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heaps and Sorting · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-chapter">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Chapter 8: Heaps and Sorting</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class="current"><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+<ol class="secs">
+<li><a href="#sec:heap"><span class="n">8.1</span> Priority queues and the binary heap</a></li>
+<li><a href="#sec:sorting"><span class="n">8.2</span> Sorting with a heap, and by merging</a></li>
+<li><a href="#sec:quicksort"><span class="n">8.3</span> Quicksort</a></li>
+<li><a href="#sec:lower-bound"><span class="n">8.4</span> How fast can sorting be?</a></li>
+<li><a href="#sec:sorting-practice"><span class="n">8.5</span> Sorting in practice</a></li>
+<li><a href="#sec:heaps-ex">Exercises</a></li>
+<li><a href="#sec:heaps-notes">Chapter notes</a></li>
+</ol>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:heaps">
+<p class="kicker">
+Chapter 8 · Week 8
+</p>
+<h1>
+Heaps and Sorting
+</h1>
+</header>
+<aside class="callout goals"><p class="callout-title"><span class="lab">This week</span></p>
+<p>By the end of this week you should be able to:</p>
+<ul>
+<li>state the two invariants of a binary heap, and explain how they let a tree be stored in an array with no pointers;</li>
+<li>implement <code>push</code>, <code>pop</code>, and linear-time heap construction, and use <code>std::priority_queue</code>;</li>
+<li>explain and implement heapsort, mergesort, and quicksort, and give the time, space, and stability of each;</li>
+<li>explain why no comparison-based sort can beat <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>log</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">n \log n</annotation></semantics></math>, and how counting sort gets around the limit;</li>
+<li>use the standard library’s sorting facilities well, and say what <code>std::sort</code> actually does.</li>
+</ul>
+</aside>
+<p>An emergency room does not treat patients in the order they arrive. It treats the most urgent first. An operating system runs the highest-priority task that is ready. A simulation processes whichever pending event has the earliest timestamp. In each case items arrive in any order, and at any moment we want to remove the <em>smallest</em> one (most urgent, earliest), with arrivals and removals interleaved.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 8.1</span></p>
+<p>Consider implementing this with structures we already have. For each, give the cost of adding an item and the cost of removing the smallest: (a) an unsorted vector; (b) a vector kept sorted; (c) a balanced search tree. Is there anything unsatisfying about the best of them?</p>
+<details class="answer"><summary>Answer</summary>
+<ol type="a">
+<li>Add: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>, at the end. Remove smallest: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>, since it must be searched for. (b) Add: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>, to shift elements; remove smallest: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> if the vector is sorted in decreasing order so that the smallest is at the back. (c) Both <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math>. The tree is the only one with no linear-time operation, but it is doing far more than was asked. It keeps <em>every</em> element in order, in a pointer-heavy structure, when all we ever want is the smallest one.</li>
+</ol>
+</details>
+</aside>
+<p>That last observation is the key to this chapter. Fully sorted order is a strong promise, and expensive to maintain. If all we need is fast access to the minimum, a much weaker promise will do, and a weaker promise is cheaper to keep. The structure that makes exactly the right promise is the <strong>heap</strong>. It will turn out to be a tree that lives in an array, which gives it the best of both worlds, and it leads directly into the oldest problem in the field: sorting.</p>
+<p>(The word “heap” here has nothing to do with the heap of <a href="01-memory.html">Chapter 1</a>, the region of memory that <code>new</code> allocates from. It is an unfortunate coincidence of names.)</p>
+<section id="sec:heap" class="level2">
+<h2><span class="secnum">8.1</span> Priority queues and the binary heap</h2>
+<p>The abstract data type is called a <strong>priority queue</strong>.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>push(x)</code></td>
+<td style="text-align: left;">add an element</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>top()</code></td>
+<td style="text-align: left;">look at the smallest element</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>pop()</code></td>
+<td style="text-align: left;">remove the smallest element</td>
+</tr>
+</tbody>
+</table>
+<p>A <strong>binary heap</strong> implements it with a binary tree that obeys two invariants.</p>
+<blockquote>
+<p><strong>Shape.</strong> The tree is <em>complete</em>: every level is full except possibly the last, and the last level is filled from the left with no gaps.</p>
+<p><strong>Order.</strong> Every node’s key is less than or equal to the keys of its children.</p>
+</blockquote>
+<p>The order invariant is the weak promise. It says nothing about left versus right; siblings are in no particular order, and a key on the left side of the tree can be larger than a key on the right. But it is enough to guarantee one thing: following it up from any node, keys only get smaller, so <strong>the smallest key is at the root</strong>. A heap ordered this way is called a <em>min-heap</em>. Reverse the comparison and the largest key is at the root: a <em>max-heap</em>.</p>
+<p>The shape invariant is what makes the structure remarkable. Because a complete tree has no gaps, its nodes can be numbered level by level, left to right, starting from 0 at the root, and stored in an array in that order. And then the tree structure does not need to be stored at all, because it can be <em>computed</em>. For the node at index <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mtext mathvariant="normal">left child: </mtext><mspace width="0.333em"></mspace></mrow><mn>2</mn><mi>i</mi><mo>+</mo><mn>1</mn><mspace width="2.0em"></mspace><mrow><mtext mathvariant="normal">right child: </mtext><mspace width="0.333em"></mspace></mrow><mn>2</mn><mi>i</mi><mo>+</mo><mn>2</mn><mspace width="2.0em"></mspace><mrow><mtext mathvariant="normal">parent: </mtext><mspace width="0.333em"></mspace></mrow><mo stretchy="false" form="prefix">⌊</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>i</mi><mo>−</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>/</mi><mn>2</mn><mo stretchy="false" form="postfix">⌋</mo></mrow><annotation encoding="application/x-tex">\text{left child: } 2i + 1 \qquad \text{right child: } 2i + 2 \qquad \text{parent: } \lfloor (i - 1)/2 \rfloor</annotation></semantics></math></p>
+<figure class="fig viz" id="fig:heap"><div class="viz-widget" data-viz="heap"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 270" width="640" height="270" role="img" aria-label="A min-heap of eight elements drawn as a tree and as an array." xmlns="http://www.w3.org/2000/svg">
+<line class="s-ink f-none" x1="305.3" y1="36.4" x2="224.7" y2="71.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="334.7" y1="36.4" x2="415.3" y2="71.6" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="197.9" y1="88.5" x2="167.1" y2="115.5" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="222.1" y1="88.5" x2="252.9" y2="115.5" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="417.9" y1="88.5" x2="387.1" y2="115.5" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="442.1" y1="88.5" x2="472.9" y2="115.5" stroke-width="1.3"/>
+<line class="s-ink f-none" x1="147.0" y1="139.9" x2="135.5" y2="160.1" stroke-width="1.3"/>
+<circle class="s-ink f-paper" cx="320.0" cy="30" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="320.0" y="30.0" text-anchor="middle" dominant-baseline="central" font-size="13">1</text>
+<text class="t-muted mono" x="342.0" y="18.0" text-anchor="middle" dominant-baseline="central" font-size="10">0</text>
+<circle class="s-accent2 f-accent2-soft" cx="210.0" cy="78" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="210.0" y="78.0" text-anchor="middle" dominant-baseline="central" font-size="13">3</text>
+<text class="t-muted mono" x="232.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="10">1</text>
+<circle class="s-ink f-paper" cx="430.0" cy="78" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="430.0" y="78.0" text-anchor="middle" dominant-baseline="central" font-size="13">2</text>
+<text class="t-muted mono" x="452.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="10">2</text>
+<circle class="s-accent f-accent-soft" cx="155.0" cy="126" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="155.0" y="126.0" text-anchor="middle" dominant-baseline="central" font-size="13">7</text>
+<text class="t-muted mono" x="177.0" y="114.0" text-anchor="middle" dominant-baseline="central" font-size="10">3</text>
+<circle class="s-accent f-accent-soft" cx="265.0" cy="126" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="265.0" y="126.0" text-anchor="middle" dominant-baseline="central" font-size="13">4</text>
+<text class="t-muted mono" x="287.0" y="114.0" text-anchor="middle" dominant-baseline="central" font-size="10">4</text>
+<circle class="s-ink f-paper" cx="375.0" cy="126" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="375.0" y="126.0" text-anchor="middle" dominant-baseline="central" font-size="13">5</text>
+<text class="t-muted mono" x="397.0" y="114.0" text-anchor="middle" dominant-baseline="central" font-size="10">5</text>
+<circle class="s-ink f-paper" cx="485.0" cy="126" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="485.0" y="126.0" text-anchor="middle" dominant-baseline="central" font-size="13">9</text>
+<text class="t-muted mono" x="507.0" y="114.0" text-anchor="middle" dominant-baseline="central" font-size="10">6</text>
+<circle class="s-ink f-paper" cx="127.5" cy="174" r="16" stroke-width="1.3"/>
+<text class="t-ink mono" x="127.5" y="174.0" text-anchor="middle" dominant-baseline="central" font-size="13">8</text>
+<text class="t-muted mono" x="149.5" y="162.0" text-anchor="middle" dominant-baseline="central" font-size="10">7</text>
+<rect class="s-ink f-none" x="144" y="204" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="166.0" y="221.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<text class="t-muted mono" x="166.0" y="249.0" text-anchor="middle" dominant-baseline="central" font-size="11">0</text>
+<rect class="s-ink f-accent2-soft" x="188" y="204" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="210.0" y="221.0" text-anchor="middle" dominant-baseline="central" font-size="14">3</text>
+<text class="t-muted mono" x="210.0" y="249.0" text-anchor="middle" dominant-baseline="central" font-size="11">1</text>
+<rect class="s-ink f-none" x="232" y="204" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="254.0" y="221.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<text class="t-muted mono" x="254.0" y="249.0" text-anchor="middle" dominant-baseline="central" font-size="11">2</text>
+<rect class="s-ink f-accent-soft" x="276" y="204" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="298.0" y="221.0" text-anchor="middle" dominant-baseline="central" font-size="14">7</text>
+<text class="t-muted mono" x="298.0" y="249.0" text-anchor="middle" dominant-baseline="central" font-size="11">3</text>
+<rect class="s-ink f-accent-soft" x="320" y="204" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="342.0" y="221.0" text-anchor="middle" dominant-baseline="central" font-size="14">4</text>
+<text class="t-muted mono" x="342.0" y="249.0" text-anchor="middle" dominant-baseline="central" font-size="11">4</text>
+<rect class="s-ink f-none" x="364" y="204" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="386.0" y="221.0" text-anchor="middle" dominant-baseline="central" font-size="14">5</text>
+<text class="t-muted mono" x="386.0" y="249.0" text-anchor="middle" dominant-baseline="central" font-size="11">5</text>
+<rect class="s-ink f-none" x="408" y="204" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="430.0" y="221.0" text-anchor="middle" dominant-baseline="central" font-size="14">9</text>
+<text class="t-muted mono" x="430.0" y="249.0" text-anchor="middle" dominant-baseline="central" font-size="11">6</text>
+<rect class="s-ink f-none" x="452" y="204" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="474.0" y="221.0" text-anchor="middle" dominant-baseline="central" font-size="14">8</text>
+<text class="t-muted mono" x="474.0" y="249.0" text-anchor="middle" dominant-baseline="central" font-size="11">7</text>
+<path class="s-accent f-none" d="M210.0,202.0 Q254.0,178.0 298.0,202.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent" points="298.0,202.0 291.8,194.5 288.4,200.9"/>
+<path class="s-accent f-none" d="M210.0,202.0 Q276.0,168.0 342.0,202.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent" points="342.0,202.0 335.6,194.7 332.4,201.1"/>
+<text class="t-muted" x="510.0" y="214.0" text-anchor="start" dominant-baseline="central" font-size="11">children of index 1:</text>
+<text class="t-accent mono" x="510.0" y="230.0" text-anchor="start" dominant-baseline="central" font-size="11">2·1+1 = 3,  2·1+2 = 4</text>
+<text class="t-muted" x="132.0" y="221.0" text-anchor="end" dominant-baseline="central" font-size="11">array</text>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 8.1</span> A binary min-heap, shown as a tree and as the array that actually stores it. The children of the element at index <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> are at indices <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>i</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">2i+1</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>i</mi><mo>+</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">2i+2</annotation></semantics></math>. No pointers are stored. In the web edition, push and pop elements and watch them sift up and down in both views.
+</figcaption></figure>
+<p>Look at what this does to the first of our four questions. A binary search tree lives in scattered nodes joined by pointers. A heap is a tree that lives in <em>one contiguous block</em>, with no pointers and no per-node allocation, and whose links are a multiplication and an addition. It has the logarithmic height of a balanced tree and the memory layout of a vector. The whole representation is a <code>std::vector</code>.</p>
+<section id="sec:heap-push" class="level3 unnumbered">
+<h3 class="unnumbered">Push</h3>
+<p>To add an element, there is only one place it can go without breaking the shape invariant: the next free position at the end of the array, which is the next gap on the bottom level. That may break the order invariant, if the new element is smaller than its parent. So swap it with its parent. Now it may be smaller than its <em>new</em> parent; swap again. The element rises until it meets a parent that is no larger, or reaches the root. This is called <strong>sifting up</strong>.</p>
+</section>
+<section id="sec:heap-pop" class="level3 unnumbered">
+<h3 class="unnumbered">Pop</h3>
+<p>The smallest element is at the root, and removing it leaves a hole at the top. Shape again dictates the repair: the only node that can be removed without leaving a gap is the <em>last</em> one. So move the last element into the root and shrink the array by one. The shape is now correct, and the order is probably wrong at the root. Compare the root with its children and swap it with the <em>smaller</em> child; repeat from there. The element sinks until both its children are no smaller, or it reaches the bottom. This is <strong>sifting down</strong>.</p>
+<div class="listing"><div class="listing-file">code/ch08/heap.hpp</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> T<span class="op">&amp;</span> top<span class="op">()</span> <span class="at">const</span> <span class="op">{</span>          <span class="co">// the smallest element</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(!</span><span class="va">a_</span><span class="op">.</span>empty<span class="op">());</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="va">a_</span><span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> push<span class="op">(</span>T value<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="va">a_</span><span class="op">.</span>push_back<span class="op">(</span><span class="bu">std::</span>move<span class="op">(</span>value<span class="op">));</span>   <span class="co">// add at the bottom...</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    sift_up<span class="op">(</span><span class="va">a_</span><span class="op">.</span>size<span class="op">()</span> <span class="op">-</span> <span class="dv">1</span><span class="op">);</span>           <span class="co">// ...and let it rise</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> pop<span class="op">()</span> <span class="op">{</span>                    <span class="co">// remove the smallest element</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="ot">assert</span><span class="op">(!</span><span class="va">a_</span><span class="op">.</span>empty<span class="op">());</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>swap<span class="op">(</span><span class="va">a_</span><span class="op">[</span><span class="dv">0</span><span class="op">],</span> <span class="va">a_</span><span class="op">.</span>back<span class="op">());</span>      <span class="co">// last element takes the root&#39;s place</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="va">a_</span><span class="op">.</span>pop_back<span class="op">();</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span><span class="va">a_</span><span class="op">.</span>empty<span class="op">())</span> sift_down<span class="op">(</span><span class="dv">0</span><span class="op">);</span>    <span class="co">// ...and sinks to where it belongs</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch08/heap.hpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> sift_up<span class="op">(</span><span class="bu">std::</span>size_t i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>i <span class="op">&gt;</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>size_t parent <span class="op">=</span> <span class="op">(</span>i <span class="op">-</span> <span class="dv">1</span><span class="op">)</span> <span class="op">/</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!(</span><span class="va">a_</span><span class="op">[</span>i<span class="op">]</span> <span class="op">&lt;</span> <span class="va">a_</span><span class="op">[</span>parent<span class="op">]))</span> <span class="cf">break</span><span class="op">;</span>     <span class="co">// parent is no larger: done</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>swap<span class="op">(</span><span class="va">a_</span><span class="op">[</span>i<span class="op">],</span> <span class="va">a_</span><span class="op">[</span>parent<span class="op">]);</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        i <span class="op">=</span> parent<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> sift_down<span class="op">(</span><span class="bu">std::</span>size_t i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="bu">std::</span>size_t n <span class="op">=</span> <span class="va">a_</span><span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="kw">true</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>size_t left <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> i <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>left <span class="op">&gt;=</span> n<span class="op">)</span> <span class="cf">break</span><span class="op">;</span>                 <span class="co">// no children: done</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>size_t smaller <span class="op">=</span> left<span class="op">;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>size_t right <span class="op">=</span> left <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>right <span class="op">&lt;</span> n <span class="op">&amp;&amp;</span> <span class="va">a_</span><span class="op">[</span>right<span class="op">]</span> <span class="op">&lt;</span> <span class="va">a_</span><span class="op">[</span>left<span class="op">])</span> smaller <span class="op">=</span> right<span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!(</span><span class="va">a_</span><span class="op">[</span>smaller<span class="op">]</span> <span class="op">&lt;</span> <span class="va">a_</span><span class="op">[</span>i<span class="op">]))</span> <span class="cf">break</span><span class="op">;</span>    <span class="co">// both children are no smaller</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>swap<span class="op">(</span><span class="va">a_</span><span class="op">[</span>i<span class="op">],</span> <span class="va">a_</span><span class="op">[</span>smaller<span class="op">]);</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        i <span class="op">=</span> smaller<span class="op">;</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 8.2</span></p>
+<p>When sifting down, why must the element be swapped with the <em>smaller</em> of its two children, and not just any child that is smaller than it?</p>
+<details class="answer"><summary>Answer</summary>
+<p>After the swap, the child that moved up becomes the parent of the other child. If the larger child were moved up, it would sit above its smaller sibling, violating the order invariant at that very node. Moving the smaller child up guarantees that the new parent is no larger than both of the nodes below it.</p>
+</details>
+</aside>
+<p>A complete tree with <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> nodes has height <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⌊</mo><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi><mo stretchy="false" form="postfix">⌋</mo><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">\lfloor \log_2 n \rfloor + 1</annotation></semantics></math>, and each of these operations moves an element along a single root-to-leaf path. So <code>push</code> and <code>pop</code> are <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math> in the worst case, and <code>top</code> is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>. There is no shape problem to worry about and no rebalancing: the shape invariant makes the tree perfectly balanced by construction.</p>
+</section>
+<section id="sec:heapify" class="level3 unnumbered">
+<h3 class="unnumbered">Building a heap in linear time</h3>
+<p>Given <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements all at once, we could build a heap by pushing them one at a time, for a total of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math>. There is a better way, found by Robert Floyd <span class="citation" data-cites="floyd1964">(<a href="#ref-floyd1964" role="doc-biblioref">Floyd 1964</a>)</span>. Put the elements in the array in any order. Then, working backward from the last node that has children to the root, sift each one down.</p>
+<div class="listing"><div class="listing-file">code/ch08/heap.hpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Build a heap from an arbitrary vector in linear time: sift down</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co">// every node that has children, from the last such node back to the root.</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">explicit</span> MinHeap<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;</span> items<span class="op">)</span> <span class="op">:</span> <span class="va">a_</span><span class="op">(</span><span class="bu">std::</span>move<span class="op">(</span>items<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> <span class="va">a_</span><span class="op">.</span>size<span class="op">()</span> <span class="op">/</span> <span class="dv">2</span><span class="op">;</span> i<span class="op">--</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">;)</span> sift_down<span class="op">(</span>i<span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>When a node is sifted down, both of its subtrees are already heaps, since they were handled earlier, so sifting down makes the whole subtree rooted there into a heap. The surprise is the cost. Half the nodes are leaves and are not touched at all. A quarter are one level above the leaves and can sink at most one level. An eighth can sink at most two. The total number of moves is at most</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mi>n</mi><mn>4</mn></mfrac><mo>⋅</mo><mn>1</mn><mo>+</mo><mfrac><mi>n</mi><mn>8</mn></mfrac><mo>⋅</mo><mn>2</mn><mo>+</mo><mfrac><mi>n</mi><mn>16</mn></mfrac><mo>⋅</mo><mn>3</mn><mo>+</mo><mi>⋯</mi><mo>&lt;</mo><mi>n</mi><mi>.</mi></mrow><annotation encoding="application/x-tex">\frac{n}{4}\cdot 1 + \frac{n}{8}\cdot 2 + \frac{n}{16}\cdot 3 + \cdots &lt; n.</annotation></semantics></math></p>
+<p>Building a heap takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> time. The trick is that the expensive nodes, the ones near the top with a long way to sink, are few, and the numerous nodes near the bottom are cheap.</p>
+</section>
+<section id="sec:std-pq" class="level3 unnumbered">
+<h3 class="unnumbered">In the standard library</h3>
+<p>The standard priority queue is <code>std::priority_queue</code>, an adapter over a vector, like <code>std::stack</code>.</p>
+<div class="listing"><div class="listing-file">code/ch08/sort_test.cpp</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>priority_queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> largest_first<span class="op">;</span>          <span class="co">// a max-heap by default</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> <span class="op">{</span><span class="dv">3</span><span class="op">,</span> <span class="dv">9</span><span class="op">,</span> <span class="dv">4</span><span class="op">})</span> largest_first<span class="op">.</span>push<span class="op">(</span>x<span class="op">);</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>largest_first<span class="op">.</span>top<span class="op">()</span> <span class="op">==</span> <span class="dv">9</span><span class="op">);</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co">// To get the smallest first, supply std::greater as the comparison.</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>priority_queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;,</span> <span class="bu">std::</span>greater<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&gt;</span> smallest_first<span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> <span class="op">{</span><span class="dv">3</span><span class="op">,</span> <span class="dv">9</span><span class="op">,</span> <span class="dv">4</span><span class="op">})</span> smallest_first<span class="op">.</span>push<span class="op">(</span>x<span class="op">);</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>smallest_first<span class="op">.</span>top<span class="op">()</span> <span class="op">==</span> <span class="dv">3</span><span class="op">);</span></span></code></pre></div>
+</div>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p><code>std::priority_queue</code> is a <strong>max</strong>-heap by default: <code>top()</code> is the <em>largest</em> element. This is the opposite of the convention in most textbooks and of what many algorithms want. To get a min-heap you must name all three template parameters, as above. Getting this backward is a rite of passage, and the bug is quiet: the program runs, and processes things in the worst possible order.</p>
+</aside>
+<p>A heap is not a general-purpose container, and it pays to be clear about what it has given up. There is no efficient way to search it for a particular element, and no way to visit its elements in sorted order short of popping them all. It does one thing.</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">Sorted vector</th>
+<th style="text-align: left;">Balanced tree</th>
+<th style="text-align: left;">Binary heap</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">find the minimum</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">remove the minimum</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">insert</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">build from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">search for an arbitrary key</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">extra memory per element</td>
+<td style="text-align: left;">none</td>
+<td style="text-align: left;">two or three pointers</td>
+<td style="text-align: left;">none</td>
+</tr>
+</tbody>
+</table>
+<aside class="callout wild"><p class="callout-title"><span class="lab">In the wild</span></p>
+<p>Priority queues are everywhere that “next” means “most important” and not “oldest.” Operating systems use them to pick the next timer to fire. Network routers use them to schedule packets. Discrete-event simulators, from chip design to epidemiology, are a loop around a priority queue of future events. In the next chapter a priority queue will drive the most famous shortest-path algorithm.</p>
+<p>And there is one in the loop that generates text from a language model. At each step the model assigns a score to every token in its vocabulary, perhaps a hundred thousand of them, and a common sampling strategy considers only the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> highest-scoring ones. Finding the top <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> of a hundred thousand numbers does not require sorting them all: a heap, or the selection algorithm at the end of this chapter, does it in a fraction of the time, and it happens for every token of every response.</p>
+</aside>
+</section>
+</section>
+<section id="sec:sorting" class="level2">
+<h2><span class="secnum">8.2</span> Sorting with a heap, and by merging</h2>
+<p><strong>Sorting</strong>, putting a sequence into order, is the most studied problem in computer science. It matters in itself, and it matters even more as a preliminary: binary search requires sorted input, finding duplicates is trivial once equal items are adjacent, and many problems that look hard become easy once the data is in order. We met insertion sort in <a href="02-cost.html">Chapter 2</a> and found it to be <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n^2)</annotation></semantics></math> in the worst case. We can do much better, and a heap gives the first way.</p>
+<section id="sec:heapsort" class="level3 unnumbered">
+<h3 class="unnumbered">Heapsort</h3>
+<p>Popping every element from a min-heap delivers them in increasing order, so <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> pushes followed by <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> pops is a sort, in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math> time. J. W. J. Williams, who invented the heap in 1964, invented it for this purpose <span class="citation" data-cites="williams1964">(<a href="#ref-williams1964" role="doc-biblioref">Williams 1964</a>)</span>. With one twist the sort can be done <em>in place</em>, within the array being sorted, using no extra memory at all.</p>
+<p>Build a <strong>max</strong>-heap out of the whole array. Its largest element is at index 0. Swap it with the last element of the array: the largest element is now in its final position. Regard the heap as one element shorter, and sift the new root down to restore it. Repeat. The heap shrinks from the back as the sorted region grows behind it.</p>
+<div class="listing"><div class="listing-file">code/ch08/sorts.hpp</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Sift a[i] down within the max-heap a[0..n).</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> sift_down_max<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;&amp;</span> a<span class="op">,</span> <span class="bu">std::</span>size_t i<span class="op">,</span> <span class="bu">std::</span>size_t n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="kw">true</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>size_t left <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> i <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>left <span class="op">&gt;=</span> n<span class="op">)</span> <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>size_t larger <span class="op">=</span> left<span class="op">;</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>left <span class="op">+</span> <span class="dv">1</span> <span class="op">&lt;</span> n <span class="op">&amp;&amp;</span> a<span class="op">[</span>left<span class="op">]</span> <span class="op">&lt;</span> a<span class="op">[</span>left <span class="op">+</span> <span class="dv">1</span><span class="op">])</span> larger <span class="op">=</span> left <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!(</span>a<span class="op">[</span>i<span class="op">]</span> <span class="op">&lt;</span> a<span class="op">[</span>larger<span class="op">]))</span> <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>swap<span class="op">(</span>a<span class="op">[</span>i<span class="op">],</span> a<span class="op">[</span>larger<span class="op">]);</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        i <span class="op">=</span> larger<span class="op">;</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> heap_sort<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;&amp;</span> a<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="bu">std::</span>size_t n <span class="op">=</span> a<span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t i <span class="op">=</span> n <span class="op">/</span> <span class="dv">2</span><span class="op">;</span> i<span class="op">--</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">;)</span> sift_down_max<span class="op">(</span>a<span class="op">,</span> i<span class="op">,</span> n<span class="op">);</span>   <span class="co">// build a max-heap</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t end <span class="op">=</span> n<span class="op">;</span> end <span class="op">&gt;</span> <span class="dv">1</span><span class="op">;</span> <span class="op">--</span>end<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>swap<span class="op">(</span>a<span class="op">[</span><span class="dv">0</span><span class="op">],</span> a<span class="op">[</span>end <span class="op">-</span> <span class="dv">1</span><span class="op">]);</span>        <span class="co">// largest goes to its final place</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>        sift_down_max<span class="op">(</span>a<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> end <span class="op">-</span> <span class="dv">1</span><span class="op">);</span>       <span class="co">// restore the heap on what is left</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>Heapsort takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math> time in the worst case and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math> extra space, a combination no other algorithm in this chapter achieves. Its weakness is one you can now predict from the index arithmetic: sifting down hops from index <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>i</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">2i+1</annotation></semantics></math> to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>4</mn><mi>i</mi><mo>+</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">4i+3</annotation></semantics></math>, further apart at every step, all over the array. It has poor locality, and on large inputs it is the slowest of the fast sorts in practice.</p>
+</section>
+<section id="sec:mergesort" class="level3 unnumbered">
+<h3 class="unnumbered">Mergesort</h3>
+<p>The second fast sort is the divide-and-conquer shape from <a href="06-trees.html#sec:recursion">Section 6.1</a>, applied in earnest. It rests on one observation: two sequences that are <em>already sorted</em> can be combined into one sorted sequence quickly.</p>
+<aside class="callout check"><p class="callout-title"><span class="lab">Check yourself 8.3</span></p>
+<p>You have two stacks of exam papers, each already in alphabetical order, and you want one alphabetized stack. Describe your procedure. If the stacks hold <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> papers altogether, how many times do you compare two names?</p>
+<details class="answer"><summary>Answer</summary>
+<p>Look at the top paper of each stack. Whichever name comes first goes onto the output pile. Repeat until one stack runs out, then add what remains of the other. Each comparison places one paper, so there are at most <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n - 1</annotation></semantics></math> comparisons. You never look anywhere but the tops of the two stacks.</p>
+</details>
+</aside>
+<p>That procedure is called a <strong>merge</strong>, and it takes linear time. <a href="#fig:merge">Figure 8.2</a> shows one in progress.</p>
+<figure class="fig" id="fig:merge"><svg class="figsvg" viewBox="0 0 640 220" width="640" height="220" role="img" aria-label="Two sorted runs being merged into one output array." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-muted-soft" x="60" y="44" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="82.0" y="61.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<rect class="s-ink f-muted-soft" x="104" y="44" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="126.0" y="61.0" text-anchor="middle" dominant-baseline="central" font-size="14">5</text>
+<rect class="s-ink f-accent2-soft" x="148" y="44" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="170.0" y="61.0" text-anchor="middle" dominant-baseline="central" font-size="14">9</text>
+<rect class="s-ink f-none" x="192" y="44" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="214.0" y="61.0" text-anchor="middle" dominant-baseline="central" font-size="14">14</text>
+<rect class="s-ink f-muted-soft" x="360" y="44" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="382.0" y="61.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<rect class="s-ink f-muted-soft" x="404" y="44" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-muted mono" x="426.0" y="61.0" text-anchor="middle" dominant-baseline="central" font-size="14">7</text>
+<rect class="s-ink f-accent2-soft" x="448" y="44" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="470.0" y="61.0" text-anchor="middle" dominant-baseline="central" font-size="14">12</text>
+<rect class="s-ink f-none" x="492" y="44" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="514.0" y="61.0" text-anchor="middle" dominant-baseline="central" font-size="14">20</text>
+<text class="t-ink b" x="148.0" y="24.0" text-anchor="middle" dominant-baseline="central" font-size="12">left run (sorted)</text>
+<text class="t-ink b" x="448.0" y="24.0" text-anchor="middle" dominant-baseline="central" font-size="12">right run (sorted)</text>
+<rect class="s-ink f-good-soft" x="144" y="150" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="166.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="14">1</text>
+<rect class="s-ink f-good-soft" x="188" y="150" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="210.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="14">2</text>
+<rect class="s-ink f-good-soft" x="232" y="150" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="254.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="14">5</text>
+<rect class="s-ink f-good-soft" x="276" y="150" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="298.0" y="167.0" text-anchor="middle" dominant-baseline="central" font-size="14">7</text>
+<rect class="s-ink f-paper" x="320" y="150" width="44" height="34" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-none" x="364" y="150" width="44" height="34" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-none" x="408" y="150" width="44" height="34" rx="0" stroke-width="1.3"/>
+<rect class="s-ink f-none" x="452" y="150" width="44" height="34" rx="0" stroke-width="1.3"/>
+<text class="t-ink b" x="320.0" y="202.0" text-anchor="middle" dominant-baseline="central" font-size="12">output</text>
+<text class="t-accent2 mono b" x="170.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="14">i</text>
+<text class="t-accent2 mono b" x="470.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-size="14">j</text>
+<text class="t-accent2 mono" x="320.0" y="62.0" text-anchor="middle" dominant-baseline="central" font-size="13">9 &lt; 12 ?</text>
+<path class="s-good f-none dash" d="M170.0,80.0 Q222.0,120.0 342.0,147.0" stroke-width="1.3"/>
+<polygon class="s-none f-good" points="342.0,147.0 334.0,141.5 332.4,148.5"/>
+</svg><figcaption>
+<span class="fignum">Figure 8.2</span> Merging two sorted runs. At each step the smaller of the two front elements is moved to the output. Here 9 and 12 are being compared, and 9 will be taken next. Every element is moved exactly once.
+</figcaption></figure>
+<p><strong>Mergesort</strong> is then three lines of idea. To sort a sequence: sort its left half; sort its right half; merge the two. And a sequence of zero or one elements is already sorted, which is the base case.</p>
+<div class="listing"><div class="listing-file">code/ch08/sorts.hpp</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Sort a[lo..hi), using scratch[lo..hi) as working space.</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> merge_sort<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;&amp;</span> a<span class="op">,</span> <span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;&amp;</span> scratch<span class="op">,</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>                <span class="bu">std::</span>size_t lo<span class="op">,</span> <span class="bu">std::</span>size_t hi<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>hi <span class="op">-</span> lo <span class="op">&lt;</span> <span class="dv">2</span><span class="op">)</span> <span class="cf">return</span><span class="op">;</span>                 <span class="co">// 0 or 1 elements: already sorted</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t mid <span class="op">=</span> lo <span class="op">+</span> <span class="op">(</span>hi <span class="op">-</span> lo<span class="op">)</span> <span class="op">/</span> <span class="dv">2</span><span class="op">;</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    merge_sort<span class="op">(</span>a<span class="op">,</span> scratch<span class="op">,</span> lo<span class="op">,</span> mid<span class="op">);</span>         <span class="co">// sort the left half</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    merge_sort<span class="op">(</span>a<span class="op">,</span> scratch<span class="op">,</span> mid<span class="op">,</span> hi<span class="op">);</span>         <span class="co">// sort the right half</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Merge the two sorted halves into scratch.</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t i <span class="op">=</span> lo<span class="op">,</span> j <span class="op">=</span> mid<span class="op">,</span> k <span class="op">=</span> lo<span class="op">;</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>i <span class="op">&lt;</span> mid <span class="op">&amp;&amp;</span> j <span class="op">&lt;</span> hi<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>a<span class="op">[</span>j<span class="op">]</span> <span class="op">&lt;</span> a<span class="op">[</span>i<span class="op">])</span> scratch<span class="op">[</span>k<span class="op">++]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>a<span class="op">[</span>j<span class="op">++]);</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span> scratch<span class="op">[</span>k<span class="op">++]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>a<span class="op">[</span>i<span class="op">++]);</span>   <span class="co">// on a tie, take from the left</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>i <span class="op">&lt;</span> mid<span class="op">)</span> scratch<span class="op">[</span>k<span class="op">++]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>a<span class="op">[</span>i<span class="op">++]);</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>j <span class="op">&lt;</span> hi<span class="op">)</span> scratch<span class="op">[</span>k<span class="op">++]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>a<span class="op">[</span>j<span class="op">++]);</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>k <span class="op">=</span> lo<span class="op">;</span> k <span class="op">&lt;</span> hi<span class="op">;</span> <span class="op">++</span>k<span class="op">)</span> a<span class="op">[</span>k<span class="op">]</span> <span class="op">=</span> <span class="bu">std::</span>move<span class="op">(</span>scratch<span class="op">[</span>k<span class="op">]);</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> merge_sort<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;&amp;</span> a<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;</span> scratch<span class="op">(</span>a<span class="op">.</span>size<span class="op">());</span></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>    merge_sort<span class="op">(</span>a<span class="op">,</span> scratch<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> a<span class="op">.</span>size<span class="op">());</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>The two recursive calls sort the halves <code>[lo, mid)</code> and <code>[mid, hi)</code>. The loop merges them into a scratch array, and the result is copied back. Trusting the recursion is essential here: do not try to follow the calls all the way down. Assume the two halves come back sorted, and check that the merge then produces a sorted whole.</p>
+<p>How long does it take? Let <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">T(n)</annotation></semantics></math> be the time to sort <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements. The function does two recursive calls on half-size inputs and then a linear amount of merging:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mn>2</mn><mspace width="0.167em"></mspace><mi>T</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mi>/</mi><mn>2</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>+</mo><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">T(n) = 2\,T(n/2) + \Theta(n).</annotation></semantics></math></p>
+<figure class="fig" id="fig:mergesort-tree"><svg class="figsvg" viewBox="0 0 640 262" width="640" height="262" role="img" aria-label="The recursion tree of mergesort: n work on each of log n levels." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-accent-soft" x="113.0" y="24" width="378.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="302.0" y="37.0" text-anchor="middle" dominant-baseline="central" font-size="13">n</text>
+<text class="t-accent2" x="514.0" y="37.0" text-anchor="start" dominant-baseline="central" font-size="12">n work</text>
+<rect class="s-ink f-accent-soft" x="113.0" y="68" width="186.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="206.0" y="81.0" text-anchor="middle" dominant-baseline="central" font-size="13">n/2</text>
+<rect class="s-ink f-accent-soft" x="305.0" y="68" width="186.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="398.0" y="81.0" text-anchor="middle" dominant-baseline="central" font-size="13">n/2</text>
+<text class="t-accent2" x="514.0" y="81.0" text-anchor="start" dominant-baseline="central" font-size="12">n work</text>
+<line class="s-muted f-none" x1="302.0" y1="50.0" x2="206.0" y2="68.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="302.0" y1="50.0" x2="398.0" y2="68.0" stroke-width="0.9"/>
+<rect class="s-ink f-accent-soft" x="113.0" y="112" width="90.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="158.0" y="125.0" text-anchor="middle" dominant-baseline="central" font-size="13">n/4</text>
+<rect class="s-ink f-accent-soft" x="209.0" y="112" width="90.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="254.0" y="125.0" text-anchor="middle" dominant-baseline="central" font-size="13">n/4</text>
+<rect class="s-ink f-accent-soft" x="305.0" y="112" width="90.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="350.0" y="125.0" text-anchor="middle" dominant-baseline="central" font-size="13">n/4</text>
+<rect class="s-ink f-accent-soft" x="401.0" y="112" width="90.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="446.0" y="125.0" text-anchor="middle" dominant-baseline="central" font-size="13">n/4</text>
+<text class="t-accent2" x="514.0" y="125.0" text-anchor="start" dominant-baseline="central" font-size="12">n work</text>
+<line class="s-muted f-none" x1="206.0" y1="94.0" x2="158.0" y2="112.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="206.0" y1="94.0" x2="254.0" y2="112.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="398.0" y1="94.0" x2="350.0" y2="112.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="398.0" y1="94.0" x2="446.0" y2="112.0" stroke-width="0.9"/>
+<rect class="s-ink f-accent-soft" x="113.0" y="156" width="42.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="134.0" y="169.0" text-anchor="middle" dominant-baseline="central" font-size="11">n/8</text>
+<rect class="s-ink f-accent-soft" x="161.0" y="156" width="42.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="182.0" y="169.0" text-anchor="middle" dominant-baseline="central" font-size="11">n/8</text>
+<rect class="s-ink f-accent-soft" x="209.0" y="156" width="42.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="230.0" y="169.0" text-anchor="middle" dominant-baseline="central" font-size="11">n/8</text>
+<rect class="s-ink f-accent-soft" x="257.0" y="156" width="42.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="278.0" y="169.0" text-anchor="middle" dominant-baseline="central" font-size="11">n/8</text>
+<rect class="s-ink f-accent-soft" x="305.0" y="156" width="42.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="326.0" y="169.0" text-anchor="middle" dominant-baseline="central" font-size="11">n/8</text>
+<rect class="s-ink f-accent-soft" x="353.0" y="156" width="42.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="374.0" y="169.0" text-anchor="middle" dominant-baseline="central" font-size="11">n/8</text>
+<rect class="s-ink f-accent-soft" x="401.0" y="156" width="42.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="422.0" y="169.0" text-anchor="middle" dominant-baseline="central" font-size="11">n/8</text>
+<rect class="s-ink f-accent-soft" x="449.0" y="156" width="42.0" height="26" rx="3" stroke-width="1.3"/>
+<text class="t-ink" x="470.0" y="169.0" text-anchor="middle" dominant-baseline="central" font-size="11">n/8</text>
+<text class="t-accent2" x="514.0" y="169.0" text-anchor="start" dominant-baseline="central" font-size="12">n work</text>
+<line class="s-muted f-none" x1="158.0" y1="138.0" x2="134.0" y2="156.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="158.0" y1="138.0" x2="182.0" y2="156.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="254.0" y1="138.0" x2="230.0" y2="156.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="254.0" y1="138.0" x2="278.0" y2="156.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="350.0" y1="138.0" x2="326.0" y2="156.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="350.0" y1="138.0" x2="374.0" y2="156.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="446.0" y1="138.0" x2="422.0" y2="156.0" stroke-width="0.9"/>
+<line class="s-muted f-none" x1="446.0" y1="138.0" x2="470.0" y2="156.0" stroke-width="0.9"/>
+<text class="t-muted" x="302.0" y="202.0" text-anchor="middle" dominant-baseline="central" font-size="16">· · ·</text>
+<rect class="s-ink f-accent-soft" x="111.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="123.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="135.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="147.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="159.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="171.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="183.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="195.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="207.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="219.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="231.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="243.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="255.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="267.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="279.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="291.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="303.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="315.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="327.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="339.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="351.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="363.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="375.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="387.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="399.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="411.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="423.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="435.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="447.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="459.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="471.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<rect class="s-ink f-accent-soft" x="483.5" y="222" width="9" height="16" rx="0" stroke-width="0.8"/>
+<text class="t-accent2" x="514.0" y="230.0" text-anchor="start" dominant-baseline="central" font-size="12">n work</text>
+<text class="t-muted" x="302.0" y="250.0" text-anchor="middle" dominant-baseline="central" font-size="11">pieces of size 1</text>
+<line class="s-muted f-none" x1="60.0" y1="24.0" x2="60.0" y2="238.0" stroke-width="1.3"/>
+<line class="s-muted f-none" x1="56.0" y1="24.0" x2="64.0" y2="24.0" stroke-width="1.3"/>
+<line class="s-muted f-none" x1="56.0" y1="238.0" x2="64.0" y2="238.0" stroke-width="1.3"/>
+<text class="t-muted" x="50.0" y="125.0" text-anchor="end" dominant-baseline="central" font-size="12">log n</text>
+<text class="t-muted" x="50.0" y="141.0" text-anchor="end" dominant-baseline="central" font-size="12">levels</text>
+</svg><figcaption>
+<span class="fignum">Figure 8.3</span> The recursion tree of mergesort on <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements. Each level of the tree partitions all <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements into pieces, and the merging at that level touches each element once: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> work per level. Halving reaches pieces of size 1 after <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math> levels. Total: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">n \log_2 n</annotation></semantics></math>.
+</figcaption></figure>
+<p>The picture in <a href="#fig:mergesort-tree">Figure 8.3</a> solves it. At the top level there is one merge of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements. At the next, two merges of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>/</mi><mn>2</mn></mrow><annotation encoding="application/x-tex">n/2</annotation></semantics></math>: again <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> in total. Then four merges of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>/</mi><mn>4</mn></mrow><annotation encoding="application/x-tex">n/4</annotation></semantics></math>. Every level does <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> work, and there are <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math> levels. Mergesort takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math> time, and since it does the same splitting regardless of the data, that is its best, worst, and average case alike.</p>
+<p>Mergesort has two further properties worth knowing.</p>
+<p>It needs <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> extra space for the scratch array. That is its main cost.</p>
+<p>It is <strong>stable</strong>: elements that compare equal come out in the same relative order they went in. The code ensures this by taking from the <em>left</em> run when the two front elements are equal. Stability matters whenever records are sorted by one field and already have a meaningful order in another. Sort a roster by name, then stably by graduation year, and each year’s students are still in alphabetical order. An unstable sort would scramble them. Heapsort is not stable.</p>
+</section>
+</section>
+<section id="sec:quicksort" class="level2">
+<h2><span class="secnum">8.3</span> Quicksort</h2>
+<p>The third fast sort also divides and conquers, but it does the hard work <em>before</em> the recursive calls instead of after. Tony Hoare invented it in 1959, as a visiting student in Moscow, and it remains the basis of most library sorts <span class="citation" data-cites="hoare1962">(<a href="#ref-hoare1962" role="doc-biblioref">Hoare 1962</a>)</span>.</p>
+<p>Pick one element of the sequence and call it the <strong>pivot</strong>. Rearrange the sequence so that everything smaller than the pivot comes before everything larger, with the pivot’s equals in between. This is called <strong>partitioning</strong>. Now the pivot is in its final sorted position, and no element will ever need to cross from one side to the other. Sort the two sides, recursively and independently. There is nothing to merge.</p>
+<p>Partitioning can be done in place in a single pass. The version here divides the array into three regions as it goes: less than the pivot, equal to it, and greater.</p>
+<div class="listing"><div class="listing-file">code/ch08/sorts.hpp</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Sort a[lo..hi).</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> quick_sort<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;&amp;</span> a<span class="op">,</span> <span class="bu">std::</span>size_t lo<span class="op">,</span> <span class="bu">std::</span>size_t hi<span class="op">,</span> <span class="bu">std::</span>mt19937<span class="op">&amp;</span> rng<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>hi <span class="op">-</span> lo <span class="op">&lt;</span> <span class="dv">2</span><span class="op">)</span> <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    T pivot <span class="op">=</span> a<span class="op">[</span>lo <span class="op">+</span> rng<span class="op">()</span> <span class="op">%</span> <span class="op">(</span>hi <span class="op">-</span> lo<span class="op">)];</span>     <span class="co">// a randomly chosen element</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Partition into three regions. Invariant:</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">//   a[lo..lt) &lt; pivot,   a[lt..i) == pivot,   a[gt..hi) &gt; pivot,</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">//   and a[i..gt) has not been examined yet.</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t lt <span class="op">=</span> lo<span class="op">,</span> i <span class="op">=</span> lo<span class="op">,</span> gt <span class="op">=</span> hi<span class="op">;</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>i <span class="op">&lt;</span> gt<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>a<span class="op">[</span>i<span class="op">]</span> <span class="op">&lt;</span> pivot<span class="op">)</span> <span class="bu">std::</span>swap<span class="op">(</span>a<span class="op">[</span>lt<span class="op">++],</span> a<span class="op">[</span>i<span class="op">++]);</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>pivot <span class="op">&lt;</span> a<span class="op">[</span>i<span class="op">])</span> <span class="bu">std::</span>swap<span class="op">(</span>a<span class="op">[</span>i<span class="op">],</span> a<span class="op">[--</span>gt<span class="op">]);</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span> <span class="op">++</span>i<span class="op">;</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    quick_sort<span class="op">(</span>a<span class="op">,</span> lo<span class="op">,</span> lt<span class="op">,</span> rng<span class="op">);</span>              <span class="co">// everything smaller than the pivot</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    quick_sort<span class="op">(</span>a<span class="op">,</span> gt<span class="op">,</span> hi<span class="op">,</span> rng<span class="op">);</span>              <span class="co">// everything larger</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">&gt;</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> quick_sort<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span>T<span class="op">&gt;&amp;</span> a<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>mt19937 rng<span class="op">(</span><span class="bu">std::</span>random_device<span class="op">{}());</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>    quick_sort<span class="op">(</span>a<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> a<span class="op">.</span>size<span class="op">(),</span> rng<span class="op">);</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<figure class="fig" id="fig:partition"><svg class="figsvg" viewBox="0 0 640 150" width="640" height="150" role="img" aria-label="The four regions of the three-way partition and their boundary indices." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-ink f-accent-soft" x="60" y="46" width="110" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-ink" x="115.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="13">&lt; pivot</text>
+<rect class="s-ink f-good-soft" x="170" y="46" width="90" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-ink" x="215.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="13">= pivot</text>
+<rect class="s-ink f-paper" x="260" y="46" width="190" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-muted i" x="355.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="13">not yet examined</text>
+<rect class="s-ink f-accent2-soft" x="450" y="46" width="130" height="40" rx="0" stroke-width="1.3"/>
+<text class="t-ink" x="515.0" y="66.0" text-anchor="middle" dominant-baseline="central" font-size="13">&gt; pivot</text>
+<line class="s-muted f-none" x1="60.0" y1="112.0" x2="60.0" y2="96.0" stroke-width="1.3"/>
+<polygon class="s-none f-muted" points="60.0,90.0 56.4,99.0 63.6,99.0"/>
+<text class="t-muted mono b" x="60.0" y="124.0" text-anchor="middle" dominant-baseline="central" font-size="13">lo</text>
+<line class="s-accent2 f-none" x1="170.0" y1="112.0" x2="170.0" y2="96.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="170.0,90.0 166.4,99.0 173.6,99.0"/>
+<text class="t-accent2 mono b" x="170.0" y="124.0" text-anchor="middle" dominant-baseline="central" font-size="13">lt</text>
+<line class="s-accent2 f-none" x1="260.0" y1="112.0" x2="260.0" y2="96.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="260.0,90.0 256.4,99.0 263.6,99.0"/>
+<text class="t-accent2 mono b" x="260.0" y="124.0" text-anchor="middle" dominant-baseline="central" font-size="13">i</text>
+<line class="s-accent2 f-none" x1="450.0" y1="112.0" x2="450.0" y2="96.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="450.0,90.0 446.4,99.0 453.6,99.0"/>
+<text class="t-accent2 mono b" x="450.0" y="124.0" text-anchor="middle" dominant-baseline="central" font-size="13">gt</text>
+<line class="s-muted f-none" x1="580.0" y1="112.0" x2="580.0" y2="96.0" stroke-width="1.3"/>
+<polygon class="s-none f-muted" points="580.0,90.0 576.4,99.0 583.6,99.0"/>
+<text class="t-muted mono b" x="580.0" y="124.0" text-anchor="middle" dominant-baseline="central" font-size="13">hi</text>
+<text class="t-muted" x="272.0" y="32.0" text-anchor="start" dominant-baseline="central" font-size="11">a[i] is examined next</text>
+<line class="s-muted f-none" x1="268.0" y1="38.0" x2="268.0" y2="45.0" stroke-width="1.3"/>
+</svg><figcaption>
+<span class="fignum">Figure 8.4</span> The invariant of the three-way partition, part of the way through. Everything left of <code>lt</code> is less than the pivot; everything from <code>lt</code> up to <code>i</code> equals it; everything from <code>gt</code> onward is greater. The elements from <code>i</code> up to <code>gt</code> have not yet been examined. Each step examines <code>a[i]</code> and shrinks the unexamined region by one.
+</figcaption></figure>
+<p>The loop is a fine example of programming by invariant, in the manner of binary search. The comment states what is true of the four regions, and <a href="#fig:partition">Figure 8.4</a> draws it. Each iteration looks at the first unexamined element, <code>a[i]</code>. If it is smaller than the pivot, it is swapped to the end of the “less” region, and both boundaries advance. If it is larger, it is swapped with the last unexamined element, which extends the “greater” region leftward; <code>i</code> does not advance, because the element that was swapped in has not been examined yet. If it is equal, it is already in the right place. The unexamined region shrinks by one each time, and when it is empty the partition is complete.</p>
+<section id="sec:quick-cost" class="level3 unnumbered">
+<h3 class="unnumbered">How fast is it?</h3>
+<p>Partitioning <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements takes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> time. What happens next depends entirely on how evenly the pivot splits the array.</p>
+<p><em>If the pivot always lands near the middle,</em> the two sides are each about half the size, and the recurrence is the same as mergesort’s: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math>.</p>
+<p><em>If the pivot is always the smallest or largest element,</em> one side is empty and the other has <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n - 1</annotation></semantics></math> elements. The recursion goes <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> levels deep, with partitions of size <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n - 1</annotation></semantics></math>, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">n - 2</annotation></semantics></math>, and so on. That is our familiar sum: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n^2)</annotation></semantics></math>.</p>
+<p>So quicksort’s worst case is as bad as insertion sort’s. How likely is it? That depends on how the pivot is chosen, and the most natural choice is a trap. Here are comparison counts for a textbook quicksort that always uses the <em>first</em> element as the pivot.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;">random input</th>
+<th style="text-align: right;">already-sorted input</th>
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">n \log_2 n</annotation></semantics></math></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1,000</td>
+<td style="text-align: right;">10,684</td>
+<td style="text-align: right;">499,500</td>
+<td style="text-align: right;">9,966</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">157,017</td>
+<td style="text-align: right;">49,995,000</td>
+<td style="text-align: right;">132,877</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">100,000</td>
+<td style="text-align: right;">1,965,347</td>
+<td style="text-align: right;">4,999,950,000</td>
+<td style="text-align: right;">1,660,964</td>
+</tr>
+</tbody>
+</table>
+<p>On random input it is splendid: only a little more than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">n \log_2 n</annotation></semantics></math> comparisons. On input that is already sorted, the first element is always the smallest, every partition is as lopsided as it can be, and the count is exactly <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>−</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>/</mi><mn>2</mn></mrow><annotation encoding="application/x-tex">n(n-1)/2</annotation></semantics></math>. Five <em>billion</em> comparisons to “sort” a hundred thousand elements that were in order to begin with. We have seen this pattern twice before, with binary search trees and with hash tables: fine on random data, disastrous on a pattern, and the pattern (sorted input) is one that real data exhibits all the time.</p>
+<p>The remedy is the one used for hashing. Take the choice away from the input. The <code>quick_sort</code> above picks its pivot <strong>at random</strong>. Now no particular input is bad. The already-sorted array is no worse than any other, because the pivots are not chosen by position. For <em>every</em> input, a quicksort with random pivots is expected to examine about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1.39</mn><mspace width="0.167em"></mspace><mi>n</mi><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi><mo>−</mo><mn>2.85</mn><mspace width="0.167em"></mspace><mi>n</mi></mrow><annotation encoding="application/x-tex">1.39\, n \log_2 n - 2.85\,n</annotation></semantics></math> elements in its partitioning passes, which is what the random-input column of the table shows, and the probability of running significantly slower than that is vanishingly small. (Our three-way version tests some elements twice, once for “less” and once for “greater”, so it performs about half again as many <code>&lt;</code> comparisons.) The worst case still exists, but it has been moved from “a bad input,” which an unlucky or malicious user can supply, to “a bad run of random numbers,” which nobody controls.</p>
+<p>Quicksort sorts in place (using only the stack space for the recursion, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math> deep in expectation), and it has excellent locality: partitioning is a pair of sequential sweeps through the array. That is why, despite its worst case, it is usually the fastest of the three in practice. It is not stable.</p>
+<p><a href="#fig:sorting">Figure 8.5</a> animates all of these algorithms on the same data.</p>
+<figure class="fig viz" id="fig:sorting"><div class="viz-widget" data-viz="sorting"><div class="viz-fallback"><svg class="figsvg" viewBox="0 0 640 220" width="640" height="220" role="img" aria-label="Bars of different heights; the first four are in increasing order." xmlns="http://www.w3.org/2000/svg">
+<rect class="s-accent f-accent-soft" x="114" y="135" width="34" height="45" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="131.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">3</text>
+<rect class="s-accent f-accent-soft" x="156" y="105" width="34" height="75" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="173.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">5</text>
+<rect class="s-accent f-accent-soft" x="198" y="60" width="34" height="120" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="215.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">8</text>
+<rect class="s-accent f-accent-soft" x="240" y="45" width="34" height="135" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="257.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">9</text>
+<rect class="s-accent2 f-accent2-soft" x="282" y="120" width="34" height="60" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="299.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">4</text>
+<rect class="s-ink f-paper" x="324" y="75" width="34" height="105" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="341.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">7</text>
+<rect class="s-ink f-paper" x="366" y="150" width="34" height="30" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="383.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">2</text>
+<rect class="s-ink f-paper" x="408" y="90" width="34" height="90" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="425.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">6</text>
+<rect class="s-ink f-paper" x="450" y="165" width="34" height="15" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="467.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">1</text>
+<rect class="s-ink f-paper" x="492" y="30" width="34" height="150" rx="0" stroke-width="1.3"/>
+<text class="t-ink mono" x="509.0" y="192.0" text-anchor="middle" dominant-baseline="central" font-size="12">10</text>
+<line class="s-accent f-none" x1="114.0" y1="204.0" x2="114.0" y2="210.0" stroke-width="1.3"/>
+<line class="s-accent f-none" x1="114.0" y1="210.0" x2="274.0" y2="210.0" stroke-width="1.3"/>
+<line class="s-accent f-none" x1="274.0" y1="210.0" x2="274.0" y2="204.0" stroke-width="1.3"/>
+<text class="t-accent" x="194.0" y="221.0" text-anchor="middle" dominant-baseline="central" font-size="12">sorted so far</text>
+<text class="t-accent2 b" x="299.0" y="108.0" text-anchor="middle" dominant-baseline="central" font-size="11">next</text>
+<path class="s-accent2 f-none dash" d="M299.0,116.0 Q236.0,15.0 173.0,99.0" stroke-width="1.3"/>
+<polygon class="s-none f-accent2" points="173.0,99.0 181.3,94.0 175.5,89.6"/>
+</svg></div></div><figcaption>
+<span class="fignum">Figure 8.5</span> Insertion sort part of the way through an array, drawn as bars. The shaded bars at the left are already in order; the next bar will be slid into place among them. In the web edition, choose insertion sort, heapsort, mergesort, or quicksort, and an input that is random, sorted, or reversed, and compare the counts of comparisons and moves.
+</figcaption></figure>
+<aside class="callout byhand"><p class="callout-title"><span class="lab">By hand first</span></p>
+<p>With pencil and paper: (1) Starting from the array <code>{9, 4, 7, 1, 8, 2}</code>, build a min-heap by Floyd’s method, drawing the tree after each sift-down. Then pop twice. (2) Partition <code>{5, 3, 8, 5, 1, 9, 5, 2}</code> around the pivot 5 using the three-way scheme, writing out the array and the positions of <code>lt</code>, <code>i</code>, and <code>gt</code> after every step. (3) Merge <code>{2, 5, 9}</code> with <code>{1, 5, 7, 12}</code>, and say which 5 comes out first.</p>
+<p>These are the three inner loops of the chapter. Each has an invariant, and you understand the algorithm when you can maintain the invariant by hand. Index arithmetic in a heap and boundary movement in a partition are also places where a model asked to “show the steps” will sometimes drift, producing a trace that looks right and has one swap wrong in the middle.</p>
+</aside>
+</section>
+</section>
+<section id="sec:lower-bound" class="level2">
+<h2><span class="secnum">8.4</span> How fast can sorting be?</h2>
+<p>Three different algorithms, three different ideas, and all of them arrive at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>log</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">n \log n</annotation></semantics></math>. That is suspicious. Is it a coincidence, or a barrier?</p>
+<p>It is a barrier, and the argument that establishes it is one of the prettiest in the subject, because it applies to <em>every possible</em> sorting algorithm of a certain kind, including ones not yet invented.</p>
+<p>Consider any algorithm that learns about its input only by <strong>comparing</strong> pairs of elements. All the sorts so far are like this. Each comparison has two outcomes, so the algorithm’s whole execution on a given input can be described by the sequence of yes-or-no answers it received. After <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> comparisons there are at most <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mi>k</mi></msup><annotation encoding="application/x-tex">2^k</annotation></semantics></math> different sequences of answers.</p>
+<p>Now, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> distinct elements can arrive in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>!</mi></mrow><annotation encoding="application/x-tex">n!</annotation></semantics></math> different orders, and a correct algorithm must do something different for each one, since each needs a different rearrangement. If two input orders produced the <em>same</em> sequence of answers, the algorithm could not tell them apart and would rearrange them identically, getting at least one wrong. So the number of distinguishable answer sequences must be at least the number of possible inputs:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>2</mn><mi>k</mi></msup><mo>≥</mo><mi>n</mi><mi>!</mi><mo>,</mo><mspace width="2.0em"></mspace><mtext mathvariant="normal">that is,</mtext><mspace width="2.0em"></mspace><mi>k</mi><mo>≥</mo><msub><mo>log</mo><mn>2</mn></msub><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mi>!</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">2^k \ge n!, \qquad\text{that is,}\qquad k \ge \log_2 (n!).</annotation></semantics></math></p>
+<p>And <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mi>!</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\log_2(n!)</annotation></semantics></math> is approximately <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi><mo>−</mo><mn>1.44</mn><mspace width="0.167em"></mspace><mi>n</mi></mrow><annotation encoding="application/x-tex">n \log_2 n - 1.44\,n</annotation></semantics></math>. Therefore:</p>
+<blockquote>
+<p><strong>Any sorting algorithm based on comparisons must make at least about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">n \log_2 n</annotation></semantics></math> comparisons in the worst case.</strong></p>
+</blockquote>
+<p>Mergesort and heapsort are <em>optimal</em>, up to a constant factor. No cleverness will find a comparison sort that runs in linear time, because the limit comes from information: there are <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>!</mi></mrow><annotation encoding="application/x-tex">n!</annotation></semantics></math> possibilities to distinguish, and each comparison yields one bit.</p>
+<section id="sec:counting-sort" class="level3 unnumbered">
+<h3 class="unnumbered">Sorting without comparing</h3>
+<p>The theorem has a loophole, stated right in its hypothesis: <em>based on comparisons</em>. An algorithm that examines the keys themselves can do better, when the keys have exploitable structure.</p>
+<p>Suppose the keys are integers known to lie between 0 and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">k - 1</annotation></semantics></math>. Make an array of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> counters; pass over the input once, tallying each value; then write out each value as many times as it was seen.</p>
+<div class="listing"><div class="listing-file">code/ch08/sorts.hpp</div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Sort integers known to lie in the range [0, k), without comparing them.</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">inline</span> <span class="dt">void</span> counting_sort<span class="op">(</span><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&amp;</span> a<span class="op">,</span> <span class="dt">int</span> k<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;</span> count<span class="op">(</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>k<span class="op">),</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> a<span class="op">)</span> <span class="op">++</span>count<span class="op">[</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>x<span class="op">)];</span>     <span class="co">// tally each value</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>size_t out <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> v <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> v <span class="op">&lt;</span> k<span class="op">;</span> <span class="op">++</span>v<span class="op">)</span> <span class="op">{</span>                             <span class="co">// write them back in order</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">std::</span>size_t c <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> c <span class="op">&lt;</span> count<span class="op">[</span><span class="kw">static_cast</span><span class="op">&lt;</span><span class="bu">std::</span>size_t<span class="op">&gt;(</span>v<span class="op">)];</span> <span class="op">++</span>c<span class="op">)</span> a<span class="op">[</span>out<span class="op">++]</span> <span class="op">=</span> v<span class="op">;</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+</div>
+<p>This is <strong>counting sort</strong>. It never compares two elements. It uses each key as an array index, the direct-addressing idea from <a href="05-hashing.html#sec:hash-idea">Section 5.1</a>, and it runs in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n + k)</annotation></semantics></math> time. When <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> is not much larger than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>, that is linear. <strong>Radix sort</strong> extends the idea to larger keys by sorting on one digit at a time, with a stable counting sort for each digit.</p>
+</section>
+<section id="sec:sort-measure" class="level3 unnumbered">
+<h3 class="unnumbered">The stopwatch</h3>
+<p>Here are the times, in seconds, to sort <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> random integers between 0 and 999,999 with each algorithm in this chapter, alongside the standard library’s <code>std::sort</code>.</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: right;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;">insertion</th>
+<th style="text-align: right;">heapsort</th>
+<th style="text-align: right;">mergesort</th>
+<th style="text-align: right;">quicksort</th>
+<th style="text-align: right;"><code>std::sort</code></th>
+<th style="text-align: right;">counting</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">1,000</td>
+<td style="text-align: right;">0.0001</td>
+<td style="text-align: right;">0.0001</td>
+<td style="text-align: right;">0.0001</td>
+<td style="text-align: right;">0.0001</td>
+<td style="text-align: right;">0.0000</td>
+<td style="text-align: right;">0.0037</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">10,000</td>
+<td style="text-align: right;">0.0071</td>
+<td style="text-align: right;">0.0006</td>
+<td style="text-align: right;">0.0006</td>
+<td style="text-align: right;">0.0005</td>
+<td style="text-align: right;">0.0003</td>
+<td style="text-align: right;">0.0026</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">100,000</td>
+<td style="text-align: right;">0.73</td>
+<td style="text-align: right;">0.0061</td>
+<td style="text-align: right;">0.0052</td>
+<td style="text-align: right;">0.0060</td>
+<td style="text-align: right;">0.0039</td>
+<td style="text-align: right;">0.0020</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">1,000,000</td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;">0.076</td>
+<td style="text-align: right;">0.062</td>
+<td style="text-align: right;">0.066</td>
+<td style="text-align: right;">0.043</td>
+<td style="text-align: right;">0.0070</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">10,000,000</td>
+<td style="text-align: right;"></td>
+<td style="text-align: right;">1.13</td>
+<td style="text-align: right;">0.72</td>
+<td style="text-align: right;">0.61</td>
+<td style="text-align: right;">0.50</td>
+<td style="text-align: right;">0.026</td>
+</tr>
+</tbody>
+</table>
+<p>Several lessons from earlier chapters are visible at once.</p>
+<p>Insertion sort is quadratic: each tenfold increase in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> multiplies its time by a hundred. At ten million elements it would need about two hours. The three <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>log</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">n \log n</annotation></semantics></math> sorts finish in around a second.</p>
+<p>Among those three, the ranking at large <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> follows locality, not operation counts. Heapsort, which jumps around the array, is nearly twice as slow as quicksort, which sweeps through it.</p>
+<p>Counting sort is twenty times faster than <code>std::sort</code> at ten million elements, because it is linear and the others are not. But look at the top of its column: for a thousand elements it is the <em>slowest</em>, because it must still initialize and scan a million counters. Its cost is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n + k)</annotation></semantics></math>, and when <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> dwarfs <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>, the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> is what you pay for.</p>
+<p>And the standard library’s sort is faster than all of our comparison sorts, which is the subject of the next section.</p>
+</section>
+</section>
+<section id="sec:sorting-practice" class="level2">
+<h2><span class="secnum">8.5</span> Sorting in practice</h2>
+<p>You should understand the algorithms above, and you should essentially never use your own implementations of them. Every language’s standard library has a sort that is the product of decades of engineering, and it will be faster and more robust than anything written in an afternoon.</p>
+<p>What these library sorts have in common is that they are <strong>hybrids</strong>, combining several of the algorithms in this chapter so that each covers for the others’ weaknesses.</p>
+<ul>
+<li><code>std::sort</code> in the common C++ libraries is <strong>introsort</strong> <span class="citation" data-cites="musser1997">(<a href="#ref-musser1997" role="doc-biblioref">Musser 1997</a>)</span>. It begins as quicksort, with pivots chosen carefully. If the recursion gets suspiciously deep, a sign that the pivots are splitting badly, it switches to heapsort, whose worst case is guaranteed. And when a piece is small, a few dozen elements or fewer, it finishes with insertion sort, which has the lowest overhead on tiny inputs. The result has quicksort’s speed and heapsort’s guarantee.</li>
+<li><code>std::stable_sort</code> is a mergesort, with the same small-piece optimization.</li>
+<li>Python’s <code>sorted</code> and Java’s sort for objects use <strong>Timsort</strong> <span class="citation" data-cites="peters2002">(<a href="#ref-peters2002" role="doc-biblioref">Peters 2002</a>)</span>, a mergesort that first looks for stretches of the input that are already in order and merges those. On real-world data, which is often partly sorted, it does far fewer comparisons than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>log</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">n \log n</annotation></semantics></math>.</li>
+</ul>
+<p>Insertion sort, the “slow” algorithm, is inside every one of them. This is the practical meaning of the warning in <a href="02-cost.html#sec:growth">Section 2.2</a> that Big-O hides constants: for twenty elements, the quadratic algorithm with the tiny constant wins.</p>
+<section id="sec:std-sort" class="level3 unnumbered">
+<h3 class="unnumbered">Using the library</h3>
+<p><code>std::sort</code> takes a pair of iterators and, optionally, a comparison that says when one element should come before another.</p>
+<div class="listing"><div class="listing-file">code/ch08/sort_test.cpp</div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Student <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string name<span class="op">;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> year<span class="op">;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> gpa<span class="op">;</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+</div>
+<div class="listing"><div class="listing-file">code/ch08/sort_test.cpp</div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span>Student<span class="op">&gt;</span> roster<span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span><span class="st">&quot;Okafor&quot;</span><span class="op">,</span> <span class="dv">2027</span><span class="op">,</span> <span class="fl">3.6</span><span class="op">},</span> <span class="op">{</span><span class="st">&quot;Lindqvist&quot;</span><span class="op">,</span> <span class="dv">2026</span><span class="op">,</span> <span class="fl">3.9</span><span class="op">},</span> <span class="op">{</span><span class="st">&quot;Abara&quot;</span><span class="op">,</span> <span class="dv">2027</span><span class="op">,</span> <span class="fl">3.9</span><span class="op">},</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span><span class="st">&quot;Tran&quot;</span><span class="op">,</span> <span class="dv">2026</span><span class="op">,</span> <span class="fl">3.2</span><span class="op">},</span>   <span class="op">{</span><span class="st">&quot;Moreau&quot;</span><span class="op">,</span> <span class="dv">2028</span><span class="op">,</span> <span class="fl">3.6</span><span class="op">},</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Sort with a comparison: &quot;a comes before b when...&quot; Highest GPA first.</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>sort<span class="op">(</span>roster<span class="op">.</span>begin<span class="op">(),</span> roster<span class="op">.</span>end<span class="op">(),</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>          <span class="op">[](</span><span class="at">const</span> Student<span class="op">&amp;</span> a<span class="op">,</span> <span class="at">const</span> Student<span class="op">&amp;</span> b<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> a<span class="op">.</span>gpa <span class="op">&gt;</span> b<span class="op">.</span>gpa<span class="op">;</span> <span class="op">});</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>roster<span class="op">[</span><span class="dv">0</span><span class="op">].</span>gpa <span class="op">==</span> <span class="fl">3.9</span> <span class="op">&amp;&amp;</span> roster<span class="op">[</span><span class="dv">4</span><span class="op">].</span>name <span class="op">==</span> <span class="st">&quot;Tran&quot;</span><span class="op">);</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="co">// C++20 ranges: sort the whole container by one member.</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>ranges::sort<span class="op">(</span>roster<span class="op">,</span> <span class="op">{},</span> <span class="op">&amp;</span>Student<span class="op">::</span>name<span class="op">);</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>roster<span class="op">[</span><span class="dv">0</span><span class="op">].</span>name <span class="op">==</span> <span class="st">&quot;Abara&quot;</span> <span class="op">&amp;&amp;</span> roster<span class="op">[</span><span class="dv">4</span><span class="op">].</span>name <span class="op">==</span> <span class="st">&quot;Tran&quot;</span><span class="op">);</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a><span class="co">// A stable sort keeps equal elements in their existing order, so the</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a><span class="co">// roster is now grouped by year and still alphabetical within each year.</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>ranges::stable_sort<span class="op">(</span>roster<span class="op">,</span> <span class="op">{},</span> <span class="op">&amp;</span>Student<span class="op">::</span>year<span class="op">);</span></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>roster<span class="op">[</span><span class="dv">0</span><span class="op">].</span>name <span class="op">==</span> <span class="st">&quot;Lindqvist&quot;</span> <span class="op">&amp;&amp;</span> roster<span class="op">[</span><span class="dv">1</span><span class="op">].</span>name <span class="op">==</span> <span class="st">&quot;Tran&quot;</span><span class="op">);</span></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>roster<span class="op">[</span><span class="dv">2</span><span class="op">].</span>name <span class="op">==</span> <span class="st">&quot;Abara&quot;</span> <span class="op">&amp;&amp;</span> roster<span class="op">[</span><span class="dv">3</span><span class="op">].</span>name <span class="op">==</span> <span class="st">&quot;Okafor&quot;</span><span class="op">);</span></span></code></pre></div>
+</div>
+<p>The comparison in the first call is a <em>lambda</em>, an unnamed function written in place. The square brackets introduce it; then come its parameters and its body.</p>
+<p>The second call uses the C++20 <strong>ranges</strong> library: <code>std::ranges::sort</code> takes the container itself instead of two iterators, and its third argument is a <em>projection</em>, here a pointer to the member that each element should be sorted by. That is often clearer than writing a comparison. (The empty braces in the middle say “use the default comparison, <code>&lt;</code>.”)</p>
+<p>The third call shows what stability is for. The roster was just sorted by name; a stable sort by year leaves each year’s students in name order.</p>
+<p>When you do not need the whole sequence sorted, there are cheaper tools.</p>
+<div class="listing"><div class="listing-file">code/ch08/sort_test.cpp</div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> times<span class="op">{</span><span class="dv">52</span><span class="op">,</span> <span class="dv">17</span><span class="op">,</span> <span class="dv">88</span><span class="op">,</span> <span class="dv">31</span><span class="op">,</span> <span class="dv">45</span><span class="op">,</span> <span class="dv">9</span><span class="op">,</span> <span class="dv">73</span><span class="op">,</span> <span class="dv">26</span><span class="op">};</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co">// The three smallest, in order, without sorting the rest.</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>partial_sort<span class="op">(</span>times<span class="op">.</span>begin<span class="op">(),</span> times<span class="op">.</span>begin<span class="op">()</span> <span class="op">+</span> <span class="dv">3</span><span class="op">,</span> times<span class="op">.</span>end<span class="op">());</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>times<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">==</span> <span class="dv">9</span> <span class="op">&amp;&amp;</span> times<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">==</span> <span class="dv">17</span> <span class="op">&amp;&amp;</span> times<span class="op">[</span><span class="dv">2</span><span class="op">]</span> <span class="op">==</span> <span class="dv">26</span><span class="op">);</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="co">// The median: put the element that belongs at the middle position</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="co">// there, with smaller elements before it and larger ones after.</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>nth_element<span class="op">(</span>times<span class="op">.</span>begin<span class="op">(),</span> times<span class="op">.</span>begin<span class="op">()</span> <span class="op">+</span> <span class="dv">4</span><span class="op">,</span> times<span class="op">.</span>end<span class="op">());</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="ot">assert</span><span class="op">(</span>times<span class="op">[</span><span class="dv">4</span><span class="op">]</span> <span class="op">==</span> <span class="dv">45</span><span class="op">);</span></span></code></pre></div>
+</div>
+<p><code>std::partial_sort</code> uses a heap to deliver the smallest few elements in order. <code>std::nth_element</code> uses the partitioning step of quicksort, repeatedly, on only the side that contains the position of interest; it finds the median, or any other rank, in expected <em>linear</em> time, without sorting.</p>
+<aside class="callout warning"><p class="callout-title"><span class="lab">Pitfall</span></p>
+<p>The comparison passed to any of these must be a strict “comes before” relation, as discussed for <code>std::map</code> in <a href="07-balance.html#sec:ordered-maps">Section 7.5</a>. If it uses <code>&lt;=</code>, or is otherwise inconsistent (for instance, by comparing floating-point values where some are “not a number”), the behavior of <code>std::sort</code> is undefined, and in practice it can read outside the array. A sort that crashes mysteriously is very often a sort with a bad comparison.</p>
+</aside>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>Questions about what a standard library “really does” are a good test of a model’s precision, because the true answer has layers. Ask:</p>
+<blockquote>
+<p>What algorithm does std::sort use in C++? Is that required by the standard, or is it an implementation choice? What does the standard actually guarantee?</p>
+</blockquote>
+<p>A precise answer separates three things: what the C++ standard <em>requires</em> (a bound on the number of comparisons, and nothing about which algorithm), what common implementations <em>do</em> (introsort or a relative), and what is <em>not</em> promised (stability). Check the first against cppreference. An answer that says flatly “std::sort is quicksort” is the kind that is nearly right and would lose marks on an exam.</p>
+</aside>
+<aside class="callout llm"><p class="callout-title"><span class="lab">Ask an LLM</span></p>
+<p>For practice with the mechanics, use the examiner pattern, and let your own tested code be the referee.</p>
+<blockquote>
+<p>Give me an array of eight small integers and ask me to carry out ONE of: a single three-way partition around a stated pivot; one bottom-up heap construction; or one merge of its two sorted halves. Don’t show the result until I answer.</p>
+</blockquote>
+<p>Run the same step in your implementation, printing the array, to see who is right.</p>
+</aside>
+</section>
+<section id="sec:sort-summary" class="level3 unnumbered">
+<h3 class="unnumbered">The algorithms compared</h3>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Algorithm</th>
+<th style="text-align: left;">Worst case</th>
+<th style="text-align: left;">Typical</th>
+<th style="text-align: left;">Extra space</th>
+<th style="text-align: left;">Stable?</th>
+<th style="text-align: left;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Insertion sort</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n^2)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n^2)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+<td style="text-align: left;">yes</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math> on nearly sorted input; best for tiny <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Heapsort</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math></td>
+<td style="text-align: left;">no</td>
+<td style="text-align: left;">guaranteed and in place; poor locality</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Mergesort</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math></td>
+<td style="text-align: left;">yes</td>
+<td style="text-align: left;">predictable; the basis of stable library sorts</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Quicksort</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n^2)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math></td>
+<td style="text-align: left;">no</td>
+<td style="text-align: left;">fastest in practice; choose pivots at random or carefully</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Counting sort</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n + k)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n + k)</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(k)</annotation></semantics></math></td>
+<td style="text-align: left;">can be</td>
+<td style="text-align: left;">small integer keys only; not comparison-based</td>
+</tr>
+</tbody>
+</table>
+<aside class="callout fourq"><p class="callout-title"><span class="lab">The four questions</span> <span class="ttl">Binary heap</span></p>
+<dl>
+<dt>Where does it live?</dt>
+<dd>
+In a single array, with no pointers. The element at index <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> has its children at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>i</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">2i+1</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>i</mi><mo>+</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">2i+2</annotation></semantics></math> and its parent at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⌊</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>i</mi><mo>−</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>/</mi><mn>2</mn><mo stretchy="false" form="postfix">⌋</mo></mrow><annotation encoding="application/x-tex">\lfloor (i-1)/2 \rfloor</annotation></semantics></math>. It is a complete binary tree that exists only as index arithmetic.
+</dd>
+<dt>What does it promise?</dt>
+<dd>
+Shape: the tree is complete, so the array has no gaps. Order: no element is smaller than its parent, so the minimum is at index 0. Nothing is promised about the order of siblings, and there is no efficient search.
+</dd>
+<dt>What does it cost?</dt>
+<dd>
+<code>top</code>: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(1)</annotation></semantics></math>. <code>push</code> and <code>pop</code>: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(\log n)</annotation></semantics></math> worst case. Building from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n)</annotation></semantics></math>. No per-element memory overhead.
+</dd>
+<dt>How do you know?</dt>
+<dd>
+Check that every element is no smaller than its parent, after every operation; test differentially against <code>std::priority_queue</code>; pop everything and confirm that the output is sorted.
+</dd>
+</dl>
+</aside>
+</section>
+</section>
+<section id="sec:heaps-ex" class="level2 unnumbered">
+<h2 class="unnumbered">Exercises</h2>
+<ol type="1">
+<li><p>Which of these arrays are min-heaps? For those that are not, name an element that violates the order invariant. (a) <code>{1, 3, 2, 7, 4, 5}</code> (b) <code>{2, 5, 3, 4, 9, 8}</code> (c) <code>{1, 2, 3, 4, 5, 6, 7}</code> (d) <code>{4, 6, 5, 9, 8, 3}</code>.</p></li>
+<li><p>Starting from an empty min-heap, push 8, 3, 10, 1, 6, 14, 4 in that order. Draw the tree and the array after each push. Then pop three times, again drawing each state.</p></li>
+<li><p>In a min-heap of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> distinct elements stored in an array: (a) at which indices can the <em>largest</em> element be? (b) at which indices can the second-smallest be? (c) at which indices can the third-smallest be?</p></li>
+<li><p>Add a member <code>void replace_top(T value)</code> to <code>MinHeap</code>: it removes the smallest element and inserts <code>value</code>, using a single sift-down. Then use it to write a function that returns the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> largest elements of a vector of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(n \log k)</annotation></semantics></math> time and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>k</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(k)</annotation></semantics></math> extra space. (Which kind of heap do you need, of what size?)</p></li>
+<li><p>Building a heap by <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> successive <code>push</code> operations is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math> in the worst case. Describe an input order that actually takes that long. Then explain, in terms of <em>which</em> nodes travel far, why Floyd’s bottom-up method is faster.</p></li>
+<li><p>Trace mergesort on <code>{38, 27, 43, 3, 9, 82, 10}</code> by drawing the recursion tree: show each subarray as it is split on the way down, and each merged result on the way up.</p></li>
+<li><p>Mergesort as written allocates one scratch vector for the whole sort. A simpler version would allocate a new vector inside every call to hold the merged result. How much total memory would that version allocate over the whole sort? Would its Big-O running time change? Why might its measured running time change a lot?</p></li>
+<li><p>Trace the three-way partition on <code>{6, 2, 9, 6, 1, 8, 6, 3}</code> with pivot 6, showing the array and the three boundaries after each step.</p></li>
+<li><p>Our <code>quick_sort</code> recurses on both sides. In the worst case the recursion can be <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> levels deep. Rewrite it so that it recurses only on the <em>smaller</em> side and loops on the larger. What is the maximum recursion depth now, and why?</p></li>
+<li><p>Explain why a quicksort with a two-way partition (“less than pivot” on one side, “greater than or equal” on the other) takes quadratic time on an array in which all the elements are equal, whatever pivot it chooses. Why does the three-way partition not have this problem?</p></li>
+<li><p>The lower bound says a comparison sort of 5 elements needs at least <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⌈</mo><msub><mo>log</mo><mn>2</mn></msub><mn>5</mn><mi>!</mi><mo stretchy="false" form="postfix">⌉</mo><mo>=</mo><mn>7</mn></mrow><annotation encoding="application/x-tex">\lceil \log_2 5! \rceil = 7</annotation></semantics></math> comparisons in the worst case. How many does mergesort use, in the worst case, on 5 elements? (Count carefully.)</p></li>
+<li><p>You are given a vector of a million people, each with a <code>birthday</code> field giving a day of the year from 1 to 366. Describe the fastest way to sort them by birthday. Should your sort be stable? Implement it.</p></li>
+<li><p>Given a vector of integers, find the pair of elements whose values are closest together. Do it in <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(n \log n)</annotation></semantics></math> time. Then say why hashing, the tool that solved the “find a duplicate” problem in linear time, does not obviously help here.</p></li>
+<li><p><strong>With a model, as critic.</strong> Write a comparison function for sorting <code>Student</code> records by GPA, highest first, breaking ties by name alphabetically. Then ask a model: “Is this a valid strict weak ordering for std::sort? If not, give two specific students that expose the problem.” Next, deliberately break it by changing a <code>&lt;</code> to <code>&lt;=</code>, and ask again. Does the model catch it? Does AddressSanitizer, on a large enough roster with many ties?</p></li>
+<li><p><strong>Lab.</strong> Write a program that finds the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> most frequent words in a large text file, for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> given on the command line, using a hash map for the counts and a heap of size <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> for the selection. Then implement a second version that sorts all the distinct words by count. Time both on a large text (several megabytes from Project Gutenberg, concatenated if need be) for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> = 10, 1,000, and 100,000, and explain what you see. Your heap must be your own; your hash map may be the library’s.</p></li>
+</ol>
+</section>
+<section id="sec:heaps-notes" class="level2 unnumbered">
+<h2 class="unnumbered">Chapter notes</h2>
+<p>Knuth’s <em>Sorting and Searching</em> <span class="citation" data-cites="knuth1998">(<a href="#ref-knuth1998" role="doc-biblioref">Knuth 1998</a>)</span> is the encyclopedic treatment of everything in this chapter, including the history: mergesort goes back to von Neumann in 1945, quicksort to Hoare <span class="citation" data-cites="hoare1962">(<a href="#ref-hoare1962" role="doc-biblioref">Hoare 1962</a>)</span>, and the heap and heapsort to Williams <span class="citation" data-cites="williams1964">(<a href="#ref-williams1964" role="doc-biblioref">Williams 1964</a>)</span>, with the linear-time construction added by Floyd <span class="citation" data-cites="floyd1964">(<a href="#ref-floyd1964" role="doc-biblioref">Floyd 1964</a>)</span> within the year. The decision-tree lower bound is presented carefully by Cormen et al. <span class="citation" data-cites="clrs2022">(<a href="#ref-clrs2022" role="doc-biblioref">Cormen et al. 2022</a>)</span>, who also analyze randomized quicksort.</p>
+<p>The engineering of real sorts is its own literature. The three-way partition used here is Dijkstra’s solution to what he called the Dutch national flag problem <span class="citation" data-cites="dijkstra1976">(<a href="#ref-dijkstra1976" role="doc-biblioref">Dijkstra 1976</a>)</span>. Bentley and McIlroy’s “Engineering a Sort Function” <span class="citation" data-cites="bentley1993">(<a href="#ref-bentley1993" role="doc-biblioref">Bentley and McIlroy 1993</a>)</span> showed how much three-way partitioning matters in a production quicksort, and is a model of careful experimental work. Musser’s introsort <span class="citation" data-cites="musser1997">(<a href="#ref-musser1997" role="doc-biblioref">Musser 1997</a>)</span> is the basis of <code>std::sort</code>; Peters’s description of Timsort <span class="citation" data-cites="peters2002">(<a href="#ref-peters2002" role="doc-biblioref">Peters 2002</a>)</span> is unusually readable for a document that lives in a source tree. Sedgewick and Wayne <span class="citation" data-cites="sedgewick2011">(<a href="#ref-sedgewick2011" role="doc-biblioref">Sedgewick and Wayne 2011</a>)</span> give the most thorough textbook treatment of quicksort variants.</p>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-bentley1993" class="csl-entry" role="listitem">
+Bentley, Jon L., and M. Douglas McIlroy. 1993. <span>“Engineering a Sort Function.”</span> <em>Software: Practice and Experience</em> 23 (11): 1249–65.
+</div>
+<div id="ref-clrs2022" class="csl-entry" role="listitem">
+Cormen, Thomas H., Charles E. Leiserson, Ronald L. Rivest, and Clifford Stein. 2022. <em>Introduction to Algorithms</em>. 4th ed. MIT Press.
+</div>
+<div id="ref-dijkstra1976" class="csl-entry" role="listitem">
+Dijkstra, Edsger W. 1976. <em>A Discipline of Programming</em>. Prentice-Hall.
+</div>
+<div id="ref-floyd1964" class="csl-entry" role="listitem">
+Floyd, Robert W. 1964. <span>“Algorithm 245: Treesort 3.”</span> <em>Communications of the ACM</em> 7 (12): 701.
+</div>
+<div id="ref-hoare1962" class="csl-entry" role="listitem">
+Hoare, C. A. R. 1962. <span>“Quicksort.”</span> <em>The Computer Journal</em> 5 (1): 10–16.
+</div>
+<div id="ref-knuth1998" class="csl-entry" role="listitem">
+Knuth, Donald E. 1998. <em>The Art of Computer Programming, Volume 3: Sorting and Searching</em>. 2nd ed. Addison-Wesley.
+</div>
+<div id="ref-musser1997" class="csl-entry" role="listitem">
+Musser, David R. 1997. <span>“Introspective Sorting and Selection Algorithms.”</span> <em>Software: Practice and Experience</em> 27 (8): 983–93.
+</div>
+<div id="ref-peters2002" class="csl-entry" role="listitem">
+Peters, Tim. 2002. <span>“Listsort.txt.”</span> Description of the timsort algorithm, in the file <code>Objects/listsort.txt</code> of the CPython source distribution. <a href="https://github.com/python/cpython/blob/main/Objects/listsort.txt">https://github.com/python/cpython/blob/main/Objects/listsort.txt</a>.
+</div>
+<div id="ref-sedgewick2011" class="csl-entry" role="listitem">
+Sedgewick, Robert, and Kevin Wayne. 2011. <em>Algorithms</em>. 4th ed. Addison-Wesley.
+</div>
+<div id="ref-williams1964" class="csl-entry" role="listitem">
+Williams, J. W. J. 1964. <span>“Algorithm 232: Heapsort.”</span> <em>Communications of the ACM</em> 7 (6): 347–48.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="07-balance.html"><span>← Previous</span>Balance</a>
+<a class="next" href="09-graphs.html"><span>Next →</span>Graphs</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+<script src="assets/viz/core.js"></script>
+<script src="assets/viz/heap.js"></script>
+<script src="assets/viz/sorting.js"></script>
+<script>Viz.mountAll();</script>
+</body>
+</html>

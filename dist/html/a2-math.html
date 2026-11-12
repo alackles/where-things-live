@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Little Mathematics · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-appendix">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Appendix B: A Little Mathematics</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class="current"><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+<ol class="secs">
+<li><a href="#sec:math-logs"><span class="n">B.1</span> Exponents and logarithms</a></li>
+<li><a href="#sec:math-floor"><span class="n">B.2</span> Floors and ceilings</a></li>
+<li><a href="#sec:math-sums"><span class="n">B.3</span> Sums</a></li>
+<li><a href="#sec:math-induction"><span class="n">B.4</span> Induction</a></li>
+<li><a href="#sec:math-factorial"><span class="n">B.5</span> Factorials</a></li>
+<li><a href="#sec:math-prob"><span class="n">B.6</span> A little probability</a></li>
+</ol>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="app:math">
+<p class="kicker">
+Appendix B
+</p>
+<h1>
+A Little Mathematics
+</h1>
+</header>
+<p>The analysis in this book uses a small amount of mathematics, over and over. This appendix collects it in one place.</p>
+<section id="sec:math-logs" class="level2">
+<h2><span class="secnum">B.1</span> Exponents and logarithms</h2>
+<p>The <strong>logarithm</strong> undoes exponentiation: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mi>b</mi></msub><mi>x</mi></mrow><annotation encoding="application/x-tex">\log_b x</annotation></semantics></math> is the power to which <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math> must be raised to give <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>.</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mi>b</mi></msub><mi>x</mi><mo>=</mo><mi>y</mi><mspace width="1.0em"></mspace><mtext mathvariant="normal">means exactly</mtext><mspace width="1.0em"></mspace><msup><mi>b</mi><mi>y</mi></msup><mo>=</mo><mi>x</mi><mi>.</mi></mrow><annotation encoding="application/x-tex">\log_b x = y \quad\text{means exactly}\quad b^y = x.</annotation></semantics></math></p>
+<p>In this book, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>log</mo><annotation encoding="application/x-tex">\log</annotation></semantics></math> with no base means base 2. Three ways to think of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math> are worth having.</p>
+<ul>
+<li>It is the number of times <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> can be <strong>halved</strong> before reaching 1.</li>
+<li>It is the number of times 1 must be <strong>doubled</strong> to reach <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>.</li>
+<li>It is, to within one, the number of <strong>bits</strong> needed to write <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> in binary.</li>
+</ul>
+<p>Since doubling grows very quickly, the logarithm grows very slowly.</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></th>
+<th style="text-align: right;">1</th>
+<th style="text-align: right;">2</th>
+<th style="text-align: right;">8</th>
+<th style="text-align: right;">16</th>
+<th style="text-align: right;">1,024</th>
+<th style="text-align: right;">about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>10</mn><mn>6</mn></msup><annotation encoding="application/x-tex">10^6</annotation></semantics></math></th>
+<th style="text-align: right;">about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>10</mn><mn>9</mn></msup><annotation encoding="application/x-tex">10^9</annotation></semantics></math></th>
+<th style="text-align: right;">about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>10</mn><mn>18</mn></msup><annotation encoding="application/x-tex">10^{18}</annotation></semantics></math></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">\log_2 n</annotation></semantics></math></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">30</td>
+<td style="text-align: right;">60</td>
+</tr>
+</tbody>
+</table>
+<p>Memorize the middle of that table: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>2</mn><mn>10</mn></msup><mo>=</mo><mn>1024</mn></mrow><annotation encoding="application/x-tex">2^{10} = 1024</annotation></semantics></math> is about a thousand, so <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mn>20</mn></msup><annotation encoding="application/x-tex">2^{20}</annotation></semantics></math> is about a million and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>2</mn><mn>30</mn></msup><annotation encoding="application/x-tex">2^{30}</annotation></semantics></math> about a billion.</p>
+<p>The rules for logarithms mirror the rules for exponents.</p>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Exponents</th>
+<th style="text-align: left;">Logarithms</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>b</mi><mi>x</mi></msup><mo>⋅</mo><msup><mi>b</mi><mi>y</mi></msup><mo>=</mo><msup><mi>b</mi><mrow><mi>x</mi><mo>+</mo><mi>y</mi></mrow></msup></mrow><annotation encoding="application/x-tex">b^x \cdot b^y = b^{x+y}</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>x</mi><mi>y</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mo>log</mo><mi>x</mi><mo>+</mo><mo>log</mo><mi>y</mi></mrow><annotation encoding="application/x-tex">\log(xy) = \log x + \log y</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>b</mi><mi>x</mi></msup><mi>/</mi><msup><mi>b</mi><mi>y</mi></msup><mo>=</mo><msup><mi>b</mi><mrow><mi>x</mi><mo>−</mo><mi>y</mi></mrow></msup></mrow><annotation encoding="application/x-tex">b^x / b^y = b^{x-y}</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>x</mi><mi>/</mi><mi>y</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mo>log</mo><mi>x</mi><mo>−</mo><mo>log</mo><mi>y</mi></mrow><annotation encoding="application/x-tex">\log(x/y) = \log x - \log y</annotation></semantics></math></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>b</mi><mi>x</mi></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>y</mi></msup><mo>=</mo><msup><mi>b</mi><mrow><mi>x</mi><mi>y</mi></mrow></msup></mrow><annotation encoding="application/x-tex">(b^x)^y = b^{xy}</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>x</mi><mi>y</mi></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mi>y</mi><mo>log</mo><mi>x</mi></mrow><annotation encoding="application/x-tex">\log(x^y) = y \log x</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>b</mi><mn>0</mn></msup><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b^0 = 1</annotation></semantics></math></td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><mn>1</mn><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\log 1 = 0</annotation></semantics></math></td>
+</tr>
+</tbody>
+</table>
+<p>Logarithms to different bases differ only by a constant factor:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mi>a</mi></msub><mi>x</mi><mo>=</mo><mfrac><mrow><msub><mo>log</mo><mi>b</mi></msub><mi>x</mi></mrow><mrow><msub><mo>log</mo><mi>b</mi></msub><mi>a</mi></mrow></mfrac><mi>.</mi></mrow><annotation encoding="application/x-tex">\log_a x = \frac{\log_b x}{\log_b a}.</annotation></semantics></math></p>
+<p>That is why the base is omitted inside Big-O: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log_2 n)</annotation></semantics></math>, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msub><mo>log</mo><mn>10</mn></msub><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log_{10} n)</annotation></semantics></math>, and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>ln</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\ln n)</annotation></semantics></math> are all the same class. The <em>natural</em> logarithm, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>ln</mo><annotation encoding="application/x-tex">\ln</annotation></semantics></math>, has base <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>e</mi><mo>≈</mo><mn>2.718</mn></mrow><annotation encoding="application/x-tex">e \approx 2.718</annotation></semantics></math>, and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>ln</mo><mi>x</mi><mo>≈</mo><mn>0.693</mn><msub><mo>log</mo><mn>2</mn></msub><mi>x</mi></mrow><annotation encoding="application/x-tex">\ln x \approx 0.693 \log_2 x</annotation></semantics></math>.</p>
+</section>
+<section id="sec:math-floor" class="level2">
+<h2><span class="secnum">B.2</span> Floors and ceilings</h2>
+<p>The <strong>floor</strong> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⌊</mo><mi>x</mi><mo stretchy="false" form="postfix">⌋</mo></mrow><annotation encoding="application/x-tex">\lfloor x \rfloor</annotation></semantics></math> is the largest integer not greater than <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>; the <strong>ceiling</strong> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⌈</mo><mi>x</mi><mo stretchy="false" form="postfix">⌉</mo></mrow><annotation encoding="application/x-tex">\lceil x \rceil</annotation></semantics></math> is the smallest integer not less than it. So <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⌊</mo><mn>3.7</mn><mo stretchy="false" form="postfix">⌋</mo><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">\lfloor 3.7 \rfloor = 3</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⌈</mo><mn>3.2</mn><mo stretchy="false" form="postfix">⌉</mo><mo>=</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">\lceil 3.2 \rceil = 4</annotation></semantics></math>. In C++, dividing one non-negative integer by another gives the floor of the quotient: <code>7 / 2</code> is 3. The number of elements in the left half of a range of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> elements split at <code>mid = n / 2</code> is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⌊</mo><mi>n</mi><mi>/</mi><mn>2</mn><mo stretchy="false" form="postfix">⌋</mo></mrow><annotation encoding="application/x-tex">\lfloor n/2 \rfloor</annotation></semantics></math>, and the right half has <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">⌈</mo><mi>n</mi><mi>/</mi><mn>2</mn><mo stretchy="false" form="postfix">⌉</mo></mrow><annotation encoding="application/x-tex">\lceil n/2 \rceil</annotation></semantics></math>.</p>
+</section>
+<section id="sec:math-sums" class="level2">
+<h2><span class="secnum">B.3</span> Sums</h2>
+<p>Three sums account for nearly every analysis in the book.</p>
+<p><strong>The arithmetic sum.</strong> Adding the first <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> whole numbers:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mo>+</mo><mn>3</mn><mo>+</mo><mi>⋯</mi><mo>+</mo><mi>n</mi><mo>=</mo><mfrac><mrow><mi>n</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><mn>2</mn></mfrac><mi>.</mi></mrow><annotation encoding="application/x-tex">1 + 2 + 3 + \cdots + n = \frac{n(n+1)}{2}.</annotation></semantics></math></p>
+<p>To see why, write the sum forwards and backwards, one above the other. Each of the <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> columns adds to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n + 1</annotation></semantics></math>, and the two rows together are twice the sum. This sum is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n^2)</annotation></semantics></math>. It appears whenever a loop does 1 unit of work, then 2, then 3: nested loops over pairs, insertion sort, quicksort’s worst case, growing a vector by a fixed amount.</p>
+<p><strong>The geometric sum.</strong> Adding successive powers of two:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mo>+</mo><mn>4</mn><mo>+</mo><mi>⋯</mi><mo>+</mo><msup><mn>2</mn><mi>k</mi></msup><mo>=</mo><msup><mn>2</mn><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></msup><mo>−</mo><mn>1</mn><mi>.</mi></mrow><annotation encoding="application/x-tex">1 + 2 + 4 + \cdots + 2^k = 2^{k+1} - 1.</annotation></semantics></math></p>
+<p>Each term is one more than the sum of all the terms before it, so the total is just under twice the last term. This sum is dominated by its <em>largest</em> term. It appears whenever work doubles at each step: the copies made by a doubling vector, the nodes in a complete binary tree.</p>
+<p>Run the other way, with terms that <em>halve</em>, the sum stays bounded however long it goes on:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><mo>+</mo><mfrac><mn>1</mn><mn>4</mn></mfrac><mo>+</mo><mfrac><mn>1</mn><mn>8</mn></mfrac><mo>+</mo><mi>⋯</mi><mo>&lt;</mo><mn>2</mn><mo>,</mo><mspace width="2.0em"></mspace><mtext mathvariant="normal">and so</mtext><mspace width="2.0em"></mspace><mi>n</mi><mo>+</mo><mfrac><mi>n</mi><mn>2</mn></mfrac><mo>+</mo><mfrac><mi>n</mi><mn>4</mn></mfrac><mo>+</mo><mi>⋯</mi><mo>&lt;</mo><mn>2</mn><mi>n</mi><mi>.</mi></mrow><annotation encoding="application/x-tex">1 + \frac{1}{2} + \frac{1}{4} + \frac{1}{8} + \cdots &lt; 2, \qquad\text{and so}\qquad n + \frac{n}{2} + \frac{n}{4} + \cdots &lt; 2n.</annotation></semantics></math></p>
+<p><strong>The harmonic sum.</strong> Adding the reciprocals:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><mo>+</mo><mfrac><mn>1</mn><mn>3</mn></mfrac><mo>+</mo><mi>⋯</mi><mo>+</mo><mfrac><mn>1</mn><mi>n</mi></mfrac><mo>≈</mo><mo>ln</mo><mi>n</mi><mi>.</mi></mrow><annotation encoding="application/x-tex">1 + \frac{1}{2} + \frac{1}{3} + \cdots + \frac{1}{n} \approx \ln n.</annotation></semantics></math></p>
+<p>It grows logarithmically. It appears in the analysis of quicksort and of random binary search trees.</p>
+</section>
+<section id="sec:math-induction" class="level2">
+<h2><span class="secnum">B.4</span> Induction</h2>
+<p><strong>Mathematical induction</strong> proves that a statement holds for every whole number <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> from some starting point on. It has two steps.</p>
+<ol type="1">
+<li><strong>Base case.</strong> Show that the statement holds for the smallest <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>.</li>
+<li><strong>Inductive step.</strong> Show that <em>if</em> the statement holds for some <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>, <em>then</em> it holds for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n + 1</annotation></semantics></math>.</li>
+</ol>
+<p>Together these give the statement for all <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>: the base case gives it for 1; the step then gives it for 2; then for 3; and so on, like a row of dominoes.</p>
+<p><em>Example.</em> Claim: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mo>+</mo><mi>⋯</mi><mo>+</mo><mi>n</mi><mo>=</mo><mi>n</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>/</mi><mn>2</mn></mrow><annotation encoding="application/x-tex">1 + 2 + \cdots + n = n(n+1)/2</annotation></semantics></math> for every <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>≥</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n \ge 1</annotation></semantics></math>.</p>
+<p><em>Base case.</em> For <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n = 1</annotation></semantics></math> the left side is 1 and the right side is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>⋅</mo><mn>2</mn><mi>/</mi><mn>2</mn><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">1 \cdot 2 / 2 = 1</annotation></semantics></math>.</p>
+<p><em>Inductive step.</em> Suppose the claim holds for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>. Then</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mo>+</mo><mi>⋯</mi><mo>+</mo><mi>n</mi><mo>+</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mfrac><mrow><mi>n</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><mn>2</mn></mfrac><mo>+</mo><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mfrac><mrow><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>+</mo><mn>2</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><mn>2</mn></mfrac><mo>,</mo></mrow><annotation encoding="application/x-tex">1 + 2 + \cdots + n + (n+1) = \frac{n(n+1)}{2} + (n+1) = \frac{(n+1)(n+2)}{2},</annotation></semantics></math></p>
+<p>which is the claim for <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n + 1</annotation></semantics></math>.</p>
+<p>Induction is the same idea as two things you do constantly in this course. A <strong>recursive function</strong> is correct for the same reason an inductive proof is: the base case is handled directly, and the recursive case is correct <em>assuming</em> the recursive calls are. And a <strong>loop invariant</strong> is an induction over the iterations of a loop: it holds before the first iteration, and if it holds before any iteration it holds after. When you check an invariant, you are doing an inductive proof.</p>
+<p>A variant called <em>strong induction</em> assumes the statement for <em>all</em> smaller values, not just the previous one. It is what justifies recursion on halves, as in mergesort.</p>
+</section>
+<section id="sec:math-factorial" class="level2">
+<h2><span class="secnum">B.5</span> Factorials</h2>
+<p>The <strong>factorial</strong> <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>!</mi><mo>=</mo><mn>1</mn><mo>⋅</mo><mn>2</mn><mo>⋅</mo><mn>3</mn><mi>⋯</mi><mi>n</mi></mrow><annotation encoding="application/x-tex">n! = 1 \cdot 2 \cdot 3 \cdots n</annotation></semantics></math> is the number of different orders in which <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> distinct things can be arranged. It grows faster than any exponential. Its logarithm, though, is tame:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>log</mo><mn>2</mn></msub><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mi>!</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><msub><mo>log</mo><mn>2</mn></msub><mn>1</mn><mo>+</mo><msub><mo>log</mo><mn>2</mn></msub><mn>2</mn><mo>+</mo><mi>⋯</mi><mo>+</mo><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi><mo>≈</mo><mi>n</mi><msub><mo>log</mo><mn>2</mn></msub><mi>n</mi><mo>−</mo><mn>1.44</mn><mspace width="0.167em"></mspace><mi>n</mi><mo>,</mo></mrow><annotation encoding="application/x-tex">\log_2 (n!) = \log_2 1 + \log_2 2 + \cdots + \log_2 n \approx n \log_2 n - 1.44\,n,</annotation></semantics></math></p>
+<p>which is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Θ</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Theta(n \log n)</annotation></semantics></math>. This is the origin of the lower bound for sorting in <a href="08-heaps-sorting.html#sec:lower-bound">Section 8.4</a>.</p>
+</section>
+<section id="sec:math-prob" class="level2">
+<h2><span class="secnum">B.6</span> A little probability</h2>
+<p>The analysis of hash tables, quicksort, and Bloom filters uses a few facts about chance.</p>
+<p>The <strong>expected value</strong> of a random quantity is its average over all the ways the randomness could turn out, each weighted by its probability. If a fair die is rolled, the expected value is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo>+</mo><mn>2</mn><mo>+</mo><mn>3</mn><mo>+</mo><mn>4</mn><mo>+</mo><mn>5</mn><mo>+</mo><mn>6</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow><mi>/</mi><mn>6</mn><mo>=</mo><mn>3.5</mn></mrow><annotation encoding="application/x-tex">(1 + 2 + 3 + 4 + 5 + 6)/6 = 3.5</annotation></semantics></math>.</p>
+<p><strong>Expectations add.</strong> The expected value of a sum is the sum of the expected values, <em>always</em>, whether or not the quantities are independent. This one fact does a remarkable amount of work. For example: throw <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> keys into <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> buckets uniformly at random. How many keys are expected to land in bucket 0? Each key lands there with probability <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi>/</mi><mi>m</mi></mrow><annotation encoding="application/x-tex">1/m</annotation></semantics></math>, contributing an expected <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi>/</mi><mi>m</mi></mrow><annotation encoding="application/x-tex">1/m</annotation></semantics></math> to the count. Add up over <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> keys: <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>/</mi><mi>m</mi></mrow><annotation encoding="application/x-tex">n/m</annotation></semantics></math>. That is the load factor, with no further calculation needed.</p>
+<p><strong>Waiting for a success.</strong> If each attempt succeeds independently with probability <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>, the expected number of attempts up to and including the first success is <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi>/</mi><mi>p</mi></mrow><annotation encoding="application/x-tex">1/p</annotation></semantics></math>. If a fraction <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math> of a hash table’s slots are full, and probes landed on slots at random, each probe would find an empty slot with probability <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>−</mo><mi>α</mi></mrow><annotation encoding="application/x-tex">1 - \alpha</annotation></semantics></math>, so about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi>/</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo>−</mo><mi>α</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">1/(1-\alpha)</annotation></semantics></math> probes would be needed. (Linear probing does worse than this, because its probes are not independent; see <a href="05-hashing.html#sec:probing">Section 5.3</a>.)</p>
+<p><strong>Collisions come early.</strong> Among <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> keys thrown into <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> buckets there are about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>k</mi><mn>2</mn></msup><mi>/</mi><mn>2</mn></mrow><annotation encoding="application/x-tex">k^2/2</annotation></semantics></math> pairs, and each pair collides with probability <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi>/</mi><mi>m</mi></mrow><annotation encoding="application/x-tex">1/m</annotation></semantics></math>. So the expected number of colliding pairs is about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>k</mi><mn>2</mn></msup><mi>/</mi><mn>2</mn><mi>m</mi></mrow><annotation encoding="application/x-tex">k^2 / 2m</annotation></semantics></math>, which reaches 1 when <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> is about <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msqrt><mrow><mn>2</mn><mi>m</mi></mrow></msqrt><annotation encoding="application/x-tex">\sqrt{2m}</annotation></semantics></math>. A collision is likely long before the table is full. This is the birthday paradox of <a href="05-hashing.html#sec:hash-idea">Section 5.1</a>.</p>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="a1-toolchain.html"><span>← Previous</span>The Toolchain</a>
+<a class="next" href="a3-stl.html"><span>Next →</span>A Field Guide to the Standard Containers</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+
+</body>
+</html>

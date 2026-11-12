@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How This Book Was Made · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-back">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">How This Book Was Made</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class=""><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+</li>
+<li class="current"><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+<ol class="secs">
+<li><a href="#sec:colophon-who">Who wrote it</a></li>
+<li><a href="#sec:colophon-checked">What was checked, and how</a></li>
+<li><a href="#sec:colophon-not-checked">What was not checked</a></li>
+<li><a href="#sec:colophon-errata">How to report a problem</a></li>
+<li><a href="#sec:colophon-tools">Tools</a></li>
+</ol>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="ch:colophon">
+<h1>
+How This Book Was Made
+</h1>
+</header>
+<p>This book asks, of every data structure, <em>how do you know?</em> It would be poor form not to answer the same question about itself.</p>
+<section id="sec:colophon-who" class="level2">
+<h2>Who wrote it</h2>
+<p>The text, the code, the figures, and the interactive widgets were drafted by Claude, a large language model made by Anthropic (the Fable 5.2 model), working in a single extended session in November 2026 at the request of the instructor of CMSC 270 at Lawrence University. The instructor’s brief asked for a ten-week data structures text in C++ in two editions, one for the browser and one typeset with LaTeX, and left the content, the order, and the presentation to the model’s judgment. The decisions described in the preface, such as putting memory first and hashing before trees, the four recurring questions, and the stance on language models, are the model’s own.</p>
+<p>That is an unusual way for a textbook to come about, and you are entitled to ask how far to trust the result. The answer has two halves.</p>
+</section>
+<section id="sec:colophon-checked" class="level2">
+<h2>What was checked, and how</h2>
+<p><strong>The programs were compiled and run.</strong> Every C++ listing with a file path printed above it is an excerpt, extracted mechanically at build time, from that file in the <code>code/</code> directory. Running <code>make test</code> there compiles each program with <code>-std=c++20 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror</code> and both AddressSanitizer and UndefinedBehaviorSanitizer, and executes it; all of them pass. The timing programs in the <code>bench/</code> directories are the exception: they are compiled with optimization and without sanitizers, as timing requires, and were run by hand to produce the tables. A few short fragments in check-yourself questions, warnings, and exercises have no file path above them. Those were typed directly into the text and were not compiled; several are wrong on purpose.</p>
+<p><strong>The data structures were tested against independent references.</strong> The vector, lists, queue, hash tables, search trees, AVL tree, B-tree, heap, sorts, LRU cache, and trie are each put through thousands of randomized operations and compared with a standard-library container or a deliberately simple second implementation. Where a structure has an invariant that can be checked from inside (the vector, the lists, the hash tables, all the trees, the heap), an executable check runs alongside. The shortest-path, spanning-tree, topological-sort, and union-find code is checked on hundreds of small random graphs against slower independent algorithms. A few functions (depth-first visiting order, path reconstruction, the maze search) are tested only on hand-built examples.</p>
+<p><strong>The tests found real mistakes.</strong> This is worth recording, because it is the book’s argument in miniature. While the book was being written, the tests caught, among other things: an expected value for a maze’s shortest path that the author had worked out by hand and gotten wrong (the code was right); an example in Appendix C that held an iterator across a call to <code>sort</code> and then expected it to still refer to the largest element; and a demonstration of quicksort’s worst case that did not exhibit the worst case at all, because the particular partitioning scheme happened to scramble sorted input. Each of these would have gone to print as a confident, plausible, wrong statement. None of them was caught by rereading.</p>
+<p><strong>Every timing was measured.</strong> The numbers in the performance tables are the output of the programs in the <code>bench/</code> directories, run on one laptop (a 2023 Intel Core i9-13900H with 64 GB of memory, Ubuntu Linux, GCC 13.3 at <code>-O2</code>). They are single runs, reported as observed, noise included. Your machine will give different numbers and, with luck, the same patterns. Where a measurement contradicted what the author expected, the measurement stayed and the text was changed.</p>
+<p><strong>The figures are generated.</strong> Each static figure is described once, in a short Python program, and rendered from that single description both as vector graphics for the web edition and as TikZ for print. The interactive figures compute their states by running the actual algorithm in the browser; they are not hand-drawn animations. (The one exception is the memory explorer in Chapter 1, which replays a scripted trace of four small programs.)</p>
+</section>
+<section id="sec:colophon-not-checked" class="level2">
+<h2>What was not checked</h2>
+<p><strong>The prose, by a person.</strong> The explanations, historical remarks, and descriptions of how real systems work were written from the model’s training. After drafting, three separate instances of the model, given the source cold and told only to find errors, reviewed the chapters; they reported about forty problems, among them an exercise that overfilled its own hash table, three passages that overstated what the measurements beside them showed, two real bugs in the code (both in copying or moving objects, which the tests had never exercised), and several claims in an earlier draft of this very colophon that the repository did not support. All were corrected. That is a useful second pass, and it is not the same as review by a human expert, which the book has not had. The preface says that a language model sounds exactly as confident when it is wrong as when it is right. That applies to this book.</p>
+<p>Claims of the kind most likely to be wrong are: dates and attributions in the chapter notes; statements about what particular libraries and products do internally, which change over time; and the summaries of research on learning in the preface, which compress nuanced findings into a sentence or two. If something here contradicts your instructor, a primary source, or a measurement you have made yourself, believe them and not the book.</p>
+<p><strong>The bibliography.</strong> A language model can produce a citation that is perfectly formatted and entirely fictitious. The references here were restricted to well-known works, and each was then checked against publisher records, library catalogs, and primary copies on the open web by a separate automated pass. All sixty were found to exist as described; two needed corrections (a link, and a title), and a handful gained missing page numbers. One entry was added afterward and has not been through that check: Dijkstra’s <em>A Discipline of Programming</em>. That is a weaker check than a librarian’s. Before you cite any of these works in your own writing, look it up.</p>
+<p><strong>Pedagogy.</strong> No student has yet learned from this book. Whether the order works, whether the exercises are the right difficulty, and whether a ten-week term can hold all of it are empirical questions, and the people best placed to answer them are the instructor and you.</p>
+</section>
+<section id="sec:colophon-errata" class="level2">
+<h2>How to report a problem</h2>
+<p>Tell your instructor. The source of the book is a directory of Markdown files, C++ programs, and a build script, meant to be edited. A correction to the text is a one-line change; a correction to a program is checked by the same tests as everything else.</p>
+</section>
+<section id="sec:colophon-tools" class="level2">
+<h2>Tools</h2>
+<p>The source is written in Pandoc Markdown. A Python script assigns numbers, pulls the listings out of the code files, and runs Pandoc with a Lua filter to produce HTML for the web edition and LaTeX for print. The print edition is typeset by pdfLaTeX in XCharter, with Fira Sans for headings and Inconsolata for code; the web edition uses the same typefaces, which are distributed under open licenses. The web edition makes no network requests and runs from a local folder.</p>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="a3-stl.html"><span>← Previous</span>A Field Guide to the Standard Containers</a>
+<a class="next" href="bibliography.html"><span>Next →</span>Bibliography</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+
+</body>
+</html>

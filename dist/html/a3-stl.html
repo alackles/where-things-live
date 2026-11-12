@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Field Guide to the Standard Containers · Where Things Live</title>
+<script>
+(function(){try{var t=localStorage.getItem('wtl-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="kind-appendix">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Toggle table of contents" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">Where Things Live</a>
+  <span class="here">Appendix C: A Field Guide to the Standard Containers</span>
+  <button id="theme-toggle" aria-label="Switch between light and dark theme" title="Light / dark">◐</button>
+</header>
+<nav class="sidebar" id="sidebar" aria-label="Table of contents">
+<ol class="toc">
+<li class=""><a href="index.html">Contents</a></li>
+<li class=""><a href="00-preface.html"><span class="n"></span> Read This First</a>
+</li>
+<li class=""><a href="01-memory.html"><span class="n">1</span> Memory Is the Material</a>
+</li>
+<li class=""><a href="02-cost.html"><span class="n">2</span> What Does It Cost?</a>
+</li>
+<li class=""><a href="03-vector.html"><span class="n">3</span> Building a Vector</a>
+</li>
+<li class=""><a href="04-links.html"><span class="n">4</span> Links, Stacks, and Queues</a>
+</li>
+<li class=""><a href="05-hashing.html"><span class="n">5</span> Hashing</a>
+</li>
+<li class=""><a href="06-trees.html"><span class="n">6</span> Recursion and Trees</a>
+</li>
+<li class=""><a href="07-balance.html"><span class="n">7</span> Balance</a>
+</li>
+<li class=""><a href="08-heaps-sorting.html"><span class="n">8</span> Heaps and Sorting</a>
+</li>
+<li class=""><a href="09-graphs.html"><span class="n">9</span> Graphs</a>
+</li>
+<li class=""><a href="10-wild.html"><span class="n">10</span> Data Structures in the Wild</a>
+</li>
+<li class=""><a href="a1-toolchain.html"><span class="n">A</span> The Toolchain</a>
+</li>
+<li class=""><a href="a2-math.html"><span class="n">B</span> A Little Mathematics</a>
+</li>
+<li class="current"><a href="a3-stl.html"><span class="n">C</span> A Field Guide to the Standard Containers</a>
+<ol class="secs">
+<li><a href="#sec:stl-containers"><span class="n">C.1</span> The containers</a></li>
+<li><a href="#sec:stl-costs"><span class="n">C.2</span> What each operation costs</a></li>
+<li><a href="#sec:stl-invalidation"><span class="n">C.3</span> When iterators and references stop being valid</a></li>
+<li><a href="#sec:stl-idioms"><span class="n">C.4</span> Idioms</a></li>
+</ol>
+</li>
+<li class=""><a href="z1-colophon.html"><span class="n"></span> How This Book Was Made</a>
+</li>
+<li class=""><a href="bibliography.html"><span class="n"></span> Bibliography</a></li>
+</ol>
+</nav>
+<main id="main">
+<article>
+<header class="chapter-head" id="app:stl">
+<p class="kicker">
+Appendix C
+</p>
+<h1>
+A Field Guide to the Standard Containers
+</h1>
+</header>
+<p>This appendix is a quick reference to the containers of the C++ standard library, each of which you have now built or studied. For full details of any of them, consult cppreference.com <span class="citation" data-cites="cppreference">(<a href="#ref-cppreference" role="doc-biblioref"><span>“Cppreference.com: <span>C++</span> Reference”</span> 2026</a>)</span>.</p>
+<section id="sec:stl-containers" class="level2">
+<h2><span class="secnum">C.1</span> The containers</h2>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Container</th>
+<th style="text-align: left;">Built as</th>
+<th style="text-align: center;">Chapter</th>
+<th style="text-align: left;">Strengths</th>
+<th style="text-align: left;">Weaknesses</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>vector&lt;T&gt;</code></td>
+<td style="text-align: left;">contiguous block that doubles</td>
+<td style="text-align: center;">3</td>
+<td style="text-align: left;">indexing; append; iteration; cache behavior</td>
+<td style="text-align: left;">insert or erase in the middle</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>string</code></td>
+<td style="text-align: left;">a vector of characters</td>
+<td style="text-align: center;">1, 3</td>
+<td style="text-align: left;">as <code>vector</code></td>
+<td style="text-align: left;">as <code>vector</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>array&lt;T, N&gt;</code></td>
+<td style="text-align: left;">fixed-size block, no heap</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: left;">no allocation at all</td>
+<td style="text-align: left;">size fixed at compile time</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>deque&lt;T&gt;</code></td>
+<td style="text-align: left;">array of fixed-size blocks</td>
+<td style="text-align: center;">4</td>
+<td style="text-align: left;">push and pop at both ends; indexing</td>
+<td style="text-align: left;">slower iteration than <code>vector</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>list&lt;T&gt;</code></td>
+<td style="text-align: left;">doubly linked list</td>
+<td style="text-align: center;">4</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math> splice and erase given an iterator; iterators stay valid</td>
+<td style="text-align: left;">no indexing; slow to traverse</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>forward_list&lt;T&gt;</code></td>
+<td style="text-align: left;">singly linked list</td>
+<td style="text-align: center;">4</td>
+<td style="text-align: left;">as <code>list</code>, smaller</td>
+<td style="text-align: left;">forward traversal only</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>stack&lt;T&gt;</code>, <code>queue&lt;T&gt;</code></td>
+<td style="text-align: left;">adapters, over <code>deque</code> by default</td>
+<td style="text-align: center;">4</td>
+<td style="text-align: left;">restricted, intention-revealing interface</td>
+<td style="text-align: left;">nothing else</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>priority_queue&lt;T&gt;</code></td>
+<td style="text-align: left;">binary heap in a <code>vector</code></td>
+<td style="text-align: center;">8</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math> largest; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math> push and pop</td>
+<td style="text-align: left;">no search; no iteration</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>unordered_map&lt;K,V&gt;</code>, <code>unordered_set&lt;K&gt;</code></td>
+<td style="text-align: left;">hash table, chained</td>
+<td style="text-align: center;">5</td>
+<td style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mn>1</mn><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math> expected lookup, insert, erase</td>
+<td style="text-align: left;">no order; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math> worst case</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>map&lt;K,V&gt;</code>, <code>set&lt;K&gt;</code></td>
+<td style="text-align: left;">red-black tree</td>
+<td style="text-align: center;">6, 7</td>
+<td style="text-align: left;">ordered; range queries; <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mrow><mo stretchy="false" form="prefix" lspace="0" rspace="0">(</mo><mo>log</mo><mi>n</mi><mo stretchy="false" form="postfix" lspace="0" rspace="0">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math> worst case</td>
+<td style="text-align: left;">slower than hashing; pointer-heavy</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>multimap</code>, <code>multiset</code></td>
+<td style="text-align: left;">red-black tree</td>
+<td style="text-align: center;">7</td>
+<td style="text-align: left;">as above, duplicate keys allowed</td>
+<td style="text-align: left;">as above</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="sec:stl-costs" class="level2">
+<h2><span class="secnum">C.2</span> What each operation costs</h2>
+<p>In the table, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> is the number of elements; “am.” means amortized and “exp.” means expected.</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;"></th>
+<th style="text-align: center;"><code>vector</code></th>
+<th style="text-align: center;"><code>deque</code></th>
+<th style="text-align: center;"><code>list</code></th>
+<th style="text-align: center;"><code>unordered_map</code></th>
+<th style="text-align: center;"><code>map</code></th>
+<th style="text-align: center;"><code>priority_queue</code></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">access by position</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">find by key or value</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math> exp.</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">\log n</annotation></semantics></math></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">insert or erase at the back</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math> am.</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math> am.</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">insert or erase at the front</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math> am.</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">insert or erase in the middle</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math>, given an iterator</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">insert or erase by key</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math> exp.</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">\log n</annotation></semantics></math></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">smallest or largest</td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math> (one end only)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">push; pop the top</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">\log n</annotation></semantics></math></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="sec:stl-invalidation" class="level2">
+<h2><span class="secnum">C.3</span> When iterators and references stop being valid</h2>
+<p>An iterator, pointer, or reference to an element refers to a place in memory. Operations that move elements make it dangle (<a href="03-vector.html#sec:templates">Section 3.5</a>). These rules are worth knowing by heart.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Container</th>
+<th style="text-align: left;">Operation</th>
+<th style="text-align: left;">What is invalidated</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>vector</code>, <code>string</code></td>
+<td style="text-align: left;"><code>push_back</code>, <code>insert</code>, <code>reserve</code> that causes reallocation</td>
+<td style="text-align: left;">everything</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"></td>
+<td style="text-align: left;"><code>insert</code> without reallocation</td>
+<td style="text-align: left;">the insertion point and everything after it</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"></td>
+<td style="text-align: left;"><code>erase</code></td>
+<td style="text-align: left;">the erased position and everything after it</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>deque</code></td>
+<td style="text-align: left;">insertion or erasure in the middle</td>
+<td style="text-align: left;">everything</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"></td>
+<td style="text-align: left;"><code>push_back</code>, <code>push_front</code></td>
+<td style="text-align: left;">all iterators (but not references to elements)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>list</code>, <code>forward_list</code></td>
+<td style="text-align: left;">insert</td>
+<td style="text-align: left;">nothing</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"></td>
+<td style="text-align: left;">erase</td>
+<td style="text-align: left;">only the erased element</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>map</code>, <code>set</code></td>
+<td style="text-align: left;">insert</td>
+<td style="text-align: left;">nothing</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"></td>
+<td style="text-align: left;">erase</td>
+<td style="text-align: left;">only the erased element</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>unordered_map</code>, <code>unordered_set</code></td>
+<td style="text-align: left;">insert that causes rehashing</td>
+<td style="text-align: left;">all iterators (but not references to elements)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"></td>
+<td style="text-align: left;">erase</td>
+<td style="text-align: left;">only the erased element</td>
+</tr>
+</tbody>
+</table>
+<p>The pattern: contiguous containers invalidate freely, because their elements move; node-based containers almost never do, because their elements stay put.</p>
+</section>
+<section id="sec:stl-idioms" class="level2">
+<h2><span class="secnum">C.4</span> Idioms</h2>
+<p>These fragments are from <code>code/appc/stl_idioms.cpp</code>, which is compiled and tested with the rest of the book’s code.</p>
+<p><strong>Removing elements from a vector.</strong></p>
+<div class="listing"><div class="listing-file">code/appc/stl_idioms.cpp</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> v<span class="op">{</span><span class="dv">4</span><span class="op">,</span> <span class="dv">8</span><span class="op">,</span> <span class="dv">15</span><span class="op">,</span> <span class="dv">16</span><span class="op">,</span> <span class="dv">23</span><span class="op">,</span> <span class="dv">42</span><span class="op">};</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Remove every element matching a condition (C++20).</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>erase_if<span class="op">(</span>v<span class="op">,</span> <span class="op">[](</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> x <span class="op">%</span> <span class="dv">2</span> <span class="op">==</span> <span class="dv">1</span><span class="op">;</span> <span class="op">});</span>   <span class="co">// {4, 8, 16, 42}</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Remove one element by position, keeping order: O(n).</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>v<span class="op">.</span>erase<span class="op">(</span>v<span class="op">.</span>begin<span class="op">()</span> <span class="op">+</span> <span class="dv">1</span><span class="op">);</span>                               <span class="co">// {4, 16, 42}</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Remove one element by position when order does not matter: O(1).</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>v<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> v<span class="op">.</span>back<span class="op">();</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>v<span class="op">.</span>pop_back<span class="op">();</span>                                         <span class="co">// {42, 16}</span></span></code></pre></div>
+</div>
+<p>Never erase from a container inside a range-<code>for</code> loop over it. Use <code>std::erase_if</code>, or loop with an explicit iterator and assign it the return value of <code>erase</code>.</p>
+<p><strong>Working with maps.</strong></p>
+<div class="listing"><div class="listing-file">code/appc/stl_idioms.cpp</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>unordered_map<span class="op">&lt;</span><span class="bu">std::</span>string<span class="op">,</span> <span class="dt">int</span><span class="op">&gt;</span> stock<span class="op">{{</span><span class="st">&quot;apple&quot;</span><span class="op">,</span> <span class="dv">3</span><span class="op">},</span> <span class="op">{</span><span class="st">&quot;pear&quot;</span><span class="op">,</span> <span class="dv">0</span><span class="op">}};</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// Look up without inserting.</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span><span class="kw">auto</span> it <span class="op">=</span> stock<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;apple&quot;</span><span class="op">);</span> it <span class="op">!=</span> stock<span class="op">.</span>end<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    it<span class="op">-&gt;</span>second <span class="op">-=</span> <span class="dv">1</span><span class="op">;</span>                <span class="co">// it-&gt;first is the key, it-&gt;second the value</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> has_fig <span class="op">=</span> stock<span class="op">.</span>contains<span class="op">(</span><span class="st">&quot;fig&quot;</span><span class="op">);</span>            <span class="co">// false, and &quot;fig&quot; is not added</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Insert only if absent; otherwise leave the existing value alone.</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>stock<span class="op">.</span>try_emplace<span class="op">(</span><span class="st">&quot;pear&quot;</span><span class="op">,</span> <span class="dv">99</span><span class="op">);</span>                   <span class="co">// no effect: &quot;pear&quot; exists</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>stock<span class="op">.</span>try_emplace<span class="op">(</span><span class="st">&quot;plum&quot;</span><span class="op">,</span> <span class="dv">7</span><span class="op">);</span>                    <span class="co">// inserted</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="co">// Visit every entry. Structured bindings name the two halves.</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> total <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="at">const</span> <span class="kw">auto</span><span class="op">&amp;</span> <span class="op">[</span>name<span class="op">,</span> count<span class="op">]</span> <span class="op">:</span> stock<span class="op">)</span> total <span class="op">+=</span> count<span class="op">;</span></span></code></pre></div>
+</div>
+<p>Remember that <code>m[key]</code> inserts when the key is missing. Use <code>find</code> or <code>contains</code> to look without changing the map.</p>
+<p><strong>Algorithms instead of loops.</strong> The header <code>&lt;algorithm&gt;</code> holds dozens of functions that work on any iterator range. They are tested, fast, and say what they mean.</p>
+<div class="listing"><div class="listing-file">code/appc/stl_idioms.cpp</div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> a<span class="op">{</span><span class="dv">5</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">9</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">7</span><span class="op">};</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> sum <span class="op">=</span> <span class="bu">std::</span>accumulate<span class="op">(</span>a<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">.</span>end<span class="op">(),</span> <span class="dv">0</span><span class="op">);</span>                  <span class="co">// 25</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> biggest <span class="op">=</span> <span class="op">*</span><span class="bu">std::</span>max_element<span class="op">(</span>a<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">.</span>end<span class="op">());</span>               <span class="co">// 9</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> any_neg <span class="op">=</span> <span class="bu">std::</span>any_of<span class="op">(</span>a<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">.</span>end<span class="op">(),</span> <span class="op">[](</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> x <span class="op">&lt;</span> <span class="dv">0</span><span class="op">;</span> <span class="op">});</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> n_big <span class="op">=</span> <span class="bu">std::</span>count_if<span class="op">(</span>a<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">.</span>end<span class="op">(),</span> <span class="op">[](</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> x <span class="op">&gt;</span> <span class="dv">4</span><span class="op">;</span> <span class="op">});</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>sort<span class="op">(</span>a<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">.</span>end<span class="op">());</span>                                     <span class="co">// {1, 3, 5, 7, 9}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> has7 <span class="op">=</span> <span class="bu">std::</span>binary_search<span class="op">(</span>a<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">.</span>end<span class="op">(),</span> <span class="dv">7</span><span class="op">);</span>             <span class="co">// needs sorted input</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> next <span class="op">=</span> <span class="op">*</span><span class="bu">std::</span>lower_bound<span class="op">(</span>a<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">.</span>end<span class="op">(),</span> <span class="dv">6</span><span class="op">);</span>               <span class="co">// 7: first &gt;= 6</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>reverse<span class="op">(</span>a<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">.</span>end<span class="op">());</span>                                  <span class="co">// {9, 7, 5, 3, 1}</span></span></code></pre></div>
+</div>
+<p>Notice that <code>biggest</code> holds the <em>value</em> of the largest element. An iterator obtained before the call to <code>sort</code> would still be valid afterward, since sorting does not reallocate, but it would refer to the same <em>position</em>, which now holds a different element. Iterators name places, not values.</p>
+<p><strong>General habits.</strong></p>
+<ul>
+<li>Pass containers to functions by <code>const</code> reference, or by reference if the function is to modify them. Return them by value; the move is cheap.</li>
+<li>Call <code>reserve</code> on a vector or hash table when you know roughly how many elements are coming.</li>
+<li>Prefer <code>v.empty()</code> to <code>v.size() == 0</code>, and never write <code>v.size() - 1</code> without being sure <code>v</code> is not empty.</li>
+<li>Use <code>std::size_t</code> for indices and sizes.</li>
+<li>Let <code>auto</code> name iterator types for you: <code>auto it = m.find(key);</code>.</li>
+</ul>
+</section>
+<section id="bibliography" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-cppreference" class="csl-entry" role="listitem">
+<span>“Cppreference.com: <span>C++</span> Reference.”</span> 2026. <a href="https://en.cppreference.com/">https://en.cppreference.com/</a>.
+</div>
+</div>
+</section>
+
+</article>
+<footer class="pagenav">
+<a class="prev" href="a2-math.html"><span>← Previous</span>A Little Mathematics</a>
+<a class="next" href="z1-colophon.html"><span>Next →</span>How This Book Was Made</a>
+</footer>
+<footer class="fine">
+<p><em>Where Things Live: Data Structures in Modern C++</em> · First draft edition, Fall 2026 · <a href="z1-colophon.html">How this book was made</a></p>
+</footer>
+</main>
+<script src="assets/book.js"></script>
+
+</body>
+</html>
