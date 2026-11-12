@@ -1,6 +1,8 @@
 # Where Things Live: Data Structures in Modern C++
 
-A ten-week textbook for CMSC 270 (Lawrence University), in two editions built from one source:
+A ten-week textbook for CMSC 270 (Lawrence University), in two editions built from one source.
+
+**Read it online: <https://alackles.github.io/where-things-live/>** (the PDF is linked from the contents page).
 
 - **Web edition**: `dist/html/index.html`. Open it straight from disk; no server and no network needed. Sixteen interactive figures, light and dark themes.
 - **Print edition**: `dist/where-things-live.pdf`, typeset with LaTeX (7 × 10 in).
