@@ -1,11 +1,23 @@
 # Where Things Live: Data Structures in Modern C++
 
-A ten-week textbook for CMSC 270 (Lawrence University), in two editions built from one source.
+A ten-week textbook for CMSC 270 (Lawrence University).
 
-**Read it online: <https://alackles.github.io/where-things-live/>** (the PDF is linked from the contents page).
+**Read it online: <https://alackles.github.io/where-things-live/>** 
 
-- **Web edition**: `dist/html/index.html`. Open it straight from disk; no server and no network needed. Sixteen interactive figures, light and dark themes.
+- **Web edition**: `dist/html/index.html`.
 - **Print edition**: `dist/where-things-live.pdf`, typeset with LaTeX (7 × 10 in).
+
+## A Human Note
+
+🐉 _Here there be dragons!_ 🐉
+
+_All the text below this note, along with the rest of the textbook in its current form, is written and maintained **only** by an LLM, with myself acting only to prompt and authorize changes. This is an intentional choice by myself, the human author (editor? curator?), to demonstrate as well as judge the current capabilities of large language models in pedagogical computational settings. Also, I think it's more interesting as an artifact that way._
+
+_Last reviewed by human eyes: November 12, 2026._
+
+---
+
+## How It's Made
 
 Drafted by Claude (Anthropic, Fable 5.2) in November 2026 at the instructor's request. Read the colophon (`chapters/z1-colophon.md`) for what was and was not verified. Short version: all code is compiled, sanitized and differentially tested; all timings are measured; the prose has had automated review only and should get a human expert's eye before students rely on it.
 
@@ -84,12 +96,3 @@ Caption text.
 `fig` names the static figure shown in print and when JavaScript is off; it defaults to the id without `fig:`. Extra attributes become `data-*` options (the AVL figure is the BST widget with `mode="avl"`). `tools/vizgallery.sh out.png [dark] [names...]` screenshots widgets in a demo state; `tools/vizcheck.sh` loads every page headlessly and reports script errors.
 
 **Citations** use Pandoc syntax, `[@knuth1998]` or `@knuth1998`, with keys from `references.bib`. The web edition lists references per chapter and on a bibliography page; the PDF uses natbib.
-
-## Things left for the instructor
-
-- **Read it critically.** Especially the chapter notes (history, attributions), the "In the wild" boxes (claims about real systems drift), and the preface's summary of research on LLMs and learning.
-- **The LLM stance** in the preface ("generate before you consult") is the book's, not a course policy. The preface defers to the syllabus; adjust to taste.
-- **Title, attribution, license.** The title page names the course, not an author. No license has been chosen for the text or code.
-- **Fit to the term.** Each chapter is sized for one week of three meetings; weeks 1, 3 and 8 are the heaviest. Exercises marked **Lab** are sized as week-long assignments. No solutions manual exists.
-- **Timings** come from one laptop (see the colophon). Rerun `code/chNN/bench/*` on the lab machines if you want local numbers; the tables in the text are typed by hand from that output.
-- **Git.** This directory is not yet a repository. `.gitignore` is set up to keep `dist/` and ignore `build/`.
